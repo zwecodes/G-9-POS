@@ -1,0 +1,1 @@
+<!-- Keep, but don't write it until code actually starts — write it right before HARDWARE-INTEGRATION.md's Flutter work begins, not now -->
