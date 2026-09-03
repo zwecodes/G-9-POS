@@ -1,9 +1,11 @@
 # G9POS API Specification
 
-**Version:** 1.5
+**Version:** 1.6
 **Status:** Resolved — no open questions
 **Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.5:** Adds the two account-administration writes required to close `DATA-MODEL.md` §9.2: one-time `POST /v1/setup` (no auth, only while `users` is empty) and `POST /v1/users` / `GET /v1/users` for owner-created staff from the dashboard. §1.1 and §1.8 record these as administration, not a second POS write path. Existing shop-data events, envelopes, `rejected[]`, reason codes, and sync-event payloads are unchanged. `sales.server_received_at` keeps the same meaning; devices now receive the stamp on pull (`DATA-MODEL.md` §3.6). §1.4's C1 conflict note is removed — `CODING-STANDARDS.md` §5.8 now matches this envelope.
 
 **Changelog since 1.4:** No contract changes. Status-only: §6.1 no longer describes G1 (`SYNC-PROTOCOL.md` §11.1) or honest optimistic void (`SYNC-PROTOCOL.md` §11.2) as open. §16 document versions updated to the current tree. Endpoints, envelopes, `rejected[]`, reason codes, and status codes are unchanged.
 
@@ -22,13 +24,13 @@
 This document defines every REST endpoint and WebSocket event exposed by the G9POS Go backend, for two consumer types:
 
 - **The Flutter POS app** (tablet + phone) — writes shop data exclusively through the sync queue (§9); reads its own local SQLite for everything else and never depends on REST reads to function offline.
-- **The remote dashboard** (iPhone / Windows / browser) — read-only, plus live updates over WebSocket. It has no write endpoints at all, matching `ARCHITECTURE.md` §10 ("you observe and advise, you don't intervene").
+- **The remote dashboard** (iPhone / Windows / browser) — read-only for shop operations, plus live updates over WebSocket. It does not void sales, edit products, or submit sync events. The only dashboard writes are account/device administration: `POST /v1/users` (§2.6) and `POST /v1/devices/{id}/revoke` (§3.4). That matches `ARCHITECTURE.md` §10.
 
 ### 1.1 The one write path
 
 Per `SYNC-PROTOCOL.md` §1: *"Every write goes to local SQLite first, server second."* This is not a POS-app implementation detail — it's an API contract. **There is no REST endpoint anywhere in this spec that creates or mutates a product, category, sale, void, expense, supplier, or supplier order directly.** Every one of those is an event type submitted through `POST /v1/sync/events` (§9), exactly like `INVENTORY_SOLD` already is. This was not true in v1.0 of this doc — v1.0 accidentally introduced a second write path with no real caller, which would have meant maintaining two code paths (REST handler + sync handler) that had to stay behaviorally identical forever, for endpoints nothing in the system actually calls. Removed.
 
-The only things that remain genuine REST writes are: **auth** (login/refresh/logout — inherently synchronous, requires a server round-trip by definition) and **device rename** (cosmetic metadata, not a synced business record).
+The only things that remain genuine REST writes are: **auth** (login/refresh/logout — inherently synchronous, requires a server round-trip by definition), **device rename** (cosmetic metadata, not a synced business record), **one-time setup** (`POST /v1/setup` — bootstrap, not a shop operation), and **user administration** (`POST /v1/users` — staff accounts, not products/sales/inventory). None of these is a second write path for POS business records.
 
 ### 1.2 Base URL & versioning
 
@@ -40,7 +42,7 @@ Path-based versioning (`/v1`). A breaking change requires `/v2` — a shop's tab
 
 ### 1.3 Auth header
 
-All endpoints except `POST /v1/auth/login` require `Authorization: Bearer <access_token>`. Missing/expired → `401`, handled by the offline-auth flow in `ARCHITECTURE.md` §7 (never surfaced as a login prompt while offline).
+All endpoints except `POST /v1/auth/login` and `POST /v1/setup` require `Authorization: Bearer <access_token>`. Missing/expired → `401`, handled by the offline-auth flow in `ARCHITECTURE.md` §7 (never surfaced as a login prompt while offline).
 
 ### 1.4 Standard response envelope
 
@@ -64,16 +66,7 @@ Error:
 
 Any lower-authority document, helper struct, or scaffolding example that describes a different envelope — for example a flat `{ success, data, error }` object — is wrong and must be corrected to match this section rather than the reverse. Per the project's documentation hierarchy, a summary or standards document does not get to redefine a contract owned by this specification.
 
-**Confirmed conflict with `CODING-STANDARDS.md` §5.8 (still present in v1.3).** That section's `APIResponse` struct is exactly the flat form ruled out above, and it does not conform on four counts:
-
-| `CODING-STANDARDS.md` §5.8 | This section requires |
-|---|---|
-| A `Success bool` field, serialized as `success` | No `success` flag — presence of `data` vs `error` is the signal |
-| `Error` is a `string` | `error` is an **object** carrying `code`, `message`, `field` |
-| No `code` field anywhere | `error.code` is a machine-readable enum from §1.5 |
-| No `meta` field anywhere | `meta.request_id` on **every** response |
-
-§5.8 is the lower-authority document and is the one that must change; this section does not move. The fix is not limited to the struct — the `response.OK` / `response.BadRequest` / `response.Unauthorized` / `response.InternalError` helpers built on it, and the `internal/products` handler examples in §5.3 and §5.4 that call them, all serialize the wrong shape and must be reworked together. As written, code scaffolded from §5.8 would satisfy no endpoint in this specification, and would break the `retry_after` (§2.1) and `blocking_product_count` (§5) fields outright, since a flat string `error` has nowhere to put them.
+**Conformance (closed in `CODING-STANDARDS.md` v1.4).** §5.8 of that document now uses this envelope: success is `{ data, meta }`, error is `{ error, meta }`, `meta.request_id` is required, and `error` is an object with `code` / `message` / `field` plus the reason-specific fields this specification already defines (`retry_after`, `blocking_product_count`). This section did not move.
 
 ### 1.5 Error codes
 
@@ -83,7 +76,7 @@ Any lower-authority document, helper struct, or scaffolding example that describ
 | `UNAUTHORIZED` | 401 | Missing/invalid/expired token |
 | `FORBIDDEN` | 403 | Valid token, insufficient role |
 | `NOT_FOUND` | 404 | Resource doesn't exist or is soft-deleted |
-| `CONFLICT` | 409 | LWW conflict, or a business rule rejected an event (e.g. void outside the allowed day). For events submitted via the sync queue this is a **per-event** outcome reported in the response body, not the batch's HTTP status — see §6.1 |
+| `CONFLICT` | 409 | LWW conflict, a business rule rejected an event (e.g. void outside the allowed day), or `POST /v1/setup` was called after the first user already exists (`SETUP_ALREADY_COMPLETE`). For events submitted via the sync queue this is a **per-event** outcome reported in the response body, not the batch's HTTP status — see §6.1 |
 | `PAYLOAD_TOO_LARGE` | 413 | Batch exceeds 5MB |
 | `RATE_LIMITED` | 429 | Too many requests, see §12 |
 | `INTERNAL_ERROR` | 500 | Unhandled server error |
@@ -98,7 +91,9 @@ Every endpoint lists which role(s) may call it: **owner**, **staff**, or **dashb
 
 ### 1.8 Dashboard identity — resolved
 
-**Resolved in 1.2.** The dashboard does **not** reuse the owner's `role: owner` token. `POST /v1/auth/login` accepts an optional `login_context: "dashboard"` field; when set, the server still validates the same username/password but issues a token with `role: dashboard_viewer` instead of `role: owner`. Every write-capable endpoint and every mutating event type in §5 rejects `dashboard_viewer` outright, even if a `dashboard_viewer` token is replayed against a POS-only path — this is enforced the same way as any other role check (§1.6), not by the client hiding buttons. This means a stolen iPhone/laptop/browser dashboard session can only ever read data, never act as the owner, which was the actual gap in v1.0/v1.1.
+**Resolved in 1.2.** The dashboard does **not** reuse the owner's `role: owner` token. `POST /v1/auth/login` accepts an optional `login_context: "dashboard"` field; when set, the server still validates the same username/password but issues a token with `role: dashboard_viewer` instead of `role: owner`. Every mutating event type in §5, and every write that changes shop data (products, sales, voids, expenses, suppliers, orders, device activation), rejects `dashboard_viewer` outright — even if that token is replayed against a POS-only path. This is enforced the same way as any other role check (§1.6), not by the client hiding buttons.
+
+**Administration carve-out (added 1.6).** `dashboard_viewer` may call exactly two writes, both already in the remote-admin class rather than shop operations: `POST /v1/users` (§2.6) and `POST /v1/devices/{id}/revoke` (§3.4). A stolen dashboard session still cannot void a sale, change a price, or submit a sync event. It can create a staff PIN record or revoke a lost device — the same remote-admin jobs the dashboard already existed to do.
 
 ---
 
@@ -122,9 +117,33 @@ Owner/staff. Revokes the refresh token server-side (denylist by token ID). Does 
 
 ### 2.4 Staff PIN
 
-Remains **on-device only** (not a server endpoint) per the original design — the PIN itself is never validated by, or known to, the server.
+PIN unlock is **on-device only** — there is no PIN login endpoint, and the server never accepts a PIN as a login factor. `POST /v1/auth/login` remains username/password.
+
+PIN hashes **may** be stored server-side (`DATA-MODEL.md` §3.1) and distributed to authorized devices on first-run pull and `GET /v1/sync/pull`, so a tablet can unlock offline after staff are created from the dashboard. That distribution is not server-side PIN validation.
 
 **Remote revocation — resolved in 1.2.** The actual risk isn't the PIN in isolation, it's a *lost device*. So instead of making PIN validation server-side (which would break offline staff login entirely), the owner gets a remote safety valve: `POST /v1/devices/{id}/revoke` (owner only, dashboard or POS). This invalidates that device's refresh token server-side immediately. The device itself keeps working offline until it next attempts to sync or refresh — at that point it's rejected and forced back to the login screen, which requires the owner's credentials, not the staff PIN, to re-authenticate. This doesn't revoke the PIN, but it kills the lost device's ability to do anything once it touches the network again, which is the actual threat being mitigated.
+
+### 2.5 `POST /v1/setup`
+
+**New in 1.6.** No auth. Creates the first owner when, and only when, `users` contains zero rows (`DATA-MODEL.md` §3.1). This is bootstrap, not a POS write and not a sync event.
+
+`POST /v1/setup` must be completed **before** the API is exposed to the public internet, or under an equivalent existing constraint already documented — `ARCHITECTURE.md` §9 / §11: PostgreSQL is not public; only the Go API is internet-facing, and that exposure happens after deploy. Do not invent a setup token, a second path, or a new role.
+
+First-owner creation must be **atomic**: concurrent `POST /v1/setup` requests cannot create more than one owner. The empty-table check and insert are one server-side transaction (or an equivalent unique one-owner constraint). A loser of that race receives `409` with `error.code: SETUP_ALREADY_COMPLETE` like any later call.
+
+Request: `{ username, password, name, pin }`. `pin` is the owner's 4-digit device PIN; the server stores it hashed, same as staff PINs. Response (envelope §1.4): `{ "data": { "user": { "id", "name", "role": "owner" } }, "meta": { "request_id" } }`. Tokens are **not** issued here — the owner then calls `POST /v1/auth/login`.
+
+**Permanently disabled afterward.** If any user row exists (including a soft-deleted owner), the handler returns `409` with `error.code: SETUP_ALREADY_COMPLETE` and does not insert. There is no reset except a manual database intervention outside this API. Rate-limited like login (§12).
+
+### 2.6 `POST /v1/users` and `GET /v1/users`
+
+**New in 1.6.** Owner JWT, or `dashboard_viewer` (the §1.8 administration carve-out). Creates a **staff** row after setup. Not a sync-queue event and not a shop-data write.
+
+`POST /v1/users` request: `{ name, pin, role }`. `role` must be `staff` — a second owner is rejected with `400 VALIDATION_ERROR` on `role`. `pin` is hashed server-side. Staff have no `username` / `password` and cannot call `POST /v1/auth/login`. Response: `{ "data": { "user": { "id", "name", "role": "staff" } }, "meta": { "request_id" } }`.
+
+`GET /v1/users` lists non-password fields (`id`, `name`, `role`, timestamps, `deleted_at`). Owner or dashboard.
+
+Created staff become visible to devices on the next `GET /v1/sync/pull` and on first-run pull (`DATA-MODEL.md` §7), so the shop tablet can unlock with that PIN offline. The PIN is still never accepted as a server login factor (§2.4).
 
 ---
 
@@ -152,7 +171,7 @@ Owner. Rename only: `{ "name": "string" }`. This is the one non-auth REST write 
 
 ### 3.4 `POST /v1/devices/{id}/revoke`
 
-**New in 1.2.** Owner only. Immediately invalidates the target device's refresh token server-side (denylist by token ID, same mechanism as logout, §2.3). The device is not contacted — it simply fails its next `/v1/auth/refresh` or sync call and falls back to the login screen. This is the resolution to §15 item 3 (lost staff device) — see §2.4.
+**New in 1.2.** Owner JWT, or `dashboard_viewer` (the §1.8 administration carve-out). Immediately invalidates the target device's refresh token server-side (denylist by token ID, same mechanism as logout, §2.3). The device is not contacted — it simply fails its next `/v1/auth/refresh` or sync call and falls back to the login screen. This is the resolution to §15 item 3 (lost staff device) — see §2.4.
 
 ---
 
@@ -178,7 +197,7 @@ Owner, dashboard only. Paginated audit trail — the "who sold what, when" scree
 
 ### 4.5 `GET /v1/sales`
 
-Owner, staff (own sales only, filtered server-side on `operator_id`), dashboard. Filters: `date_from`, `date_to`, `status`, `product_id`, `operator_id` (owner/dashboard only). Date filters resolve against `SHOP_TIMEZONE` (§1.7).
+Owner, staff (own sales only, filtered server-side on `operator_id`), dashboard. Filters: `date_from`, `date_to`, `status`, `product_id`, `operator_id` (owner/dashboard only). Date filters resolve against `SHOP_TIMEZONE` (§1.7). Sale objects include `server_received_at` when the server has stamped the sale; that field's meaning is unchanged (`DATA-MODEL.md` §3.6).
 
 ### 4.6 `GET /v1/sales/{id}`
 
@@ -368,6 +387,7 @@ Receive-only from the dashboard. No write path exists here, consistent with §1.
 | Scope | Limit |
 |---|---|
 | `/v1/auth/login` | 5 req/min/IP |
+| `/v1/setup` | 5 req/min/IP |
 | `/v1/sync/events` | 60 req/min/device |
 | All other authenticated endpoints | 300 req/min/user |
 | WebSocket connections | 3 concurrent/user |
@@ -380,7 +400,8 @@ Enforced at Nginx per `ARCHITECTURE.md` §9.
 
 | Decision | Resolution |
 |---|---|
-| Write path | Sync queue only. No direct REST write endpoints for any business entity — auth and device-rename are the sole exceptions. |
+| Write path | Sync queue only for shop records. REST writes remain auth, device-rename, one-time setup, and staff-user administration — not products/sales/inventory. |
+| First owner / staff | `POST /v1/setup` while `users` is empty; then `POST /v1/users` (`role: staff`) from the dashboard. No `USER_*` events. (Added 1.6.) |
 | Same-day void | Fixed `SHOP_TIMEZONE` (Asia/Yangon) constant, calendar-day boundary against `server_received_at` — not a rolling 24h window. |
 | Sale/inventory atomicity | Grouped by `reference_id`, never split across a sync batch, applied in one DB transaction per group. |
 | Supplier order receipt | Device-originated event group, not server-originated. |
@@ -424,13 +445,11 @@ All 7 items originally listed here (dashboard identity, login lockout, staff PIN
 
 | Document | Status | Purpose |
 |---|---|---|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.6, §11 settled | Sync design, failover, conflict resolution, rejection reconciliation (§4.4) |
-| `DATA-MODEL.md` | ✅ Done — v1.6, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
-| `ARCHITECTURE.md` | ✅ Done — v1.4 | System architecture |
-| `API-SPEC.md` | ✅ Done — v1.5, 0 open questions | This document |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.7, §11 settled | Sync design, failover, conflict resolution, rejection reconciliation (§4.4) |
+| `DATA-MODEL.md` | ✅ Done — v1.7, 0 open decisions | Database schema for SQLite and PostgreSQL |
+| `ARCHITECTURE.md` | ✅ Done — v1.5 | System architecture |
+| `API-SPEC.md` | ✅ Done — v1.6, 0 open questions | This document |
 | `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration |
 | `UI-GUIDELINES.md` | ✅ Complete — v1.1 | Design rules for non-technical users. Void copy and deferred-rejection notice: `SYNC-PROTOCOL.md` §11.2. |
-| `CODING-STANDARDS.md` | 🟡 Written at v1.3 — **§5.8 does not conform to §1.4**; §4.3 vs `SYNC-PROTOCOL.md` §2.5 also outstanding | Repo layout, layering, naming, testing. See the conformance table in §1.4. |
+| `CODING-STANDARDS.md` | ✅ Complete — v1.4 | Repo layout, layering, naming, testing. Envelope matches §1.4; `reference_id` examples match `SYNC-PROTOCOL.md` §2.5. |
 | `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
-
-**What 🟡 means in this table.** `CODING-STANDARDS.md` (v1.3) is written in full, but two conformance items remain open: §5.8 vs §1.4 of this document, and §4.3 vs `SYNC-PROTOCOL.md` §2.5. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.

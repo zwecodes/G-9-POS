@@ -1,9 +1,11 @@
 # CODING-STANDARDS.md
 
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Complete
 **Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.3:** Closes the two remaining conformance gaps. §5.8 (and the helpers §5.3/§5.4 call) now emit `API-SPEC.md` §1.4's `{ data, meta }` / `{ error, meta }` envelope — no `success` flag, `error` is an object. §4.3 enqueues standalone `PRODUCT_*` events with `referenceId: null` per `SYNC-PROTOCOL.md` §2.5. No new event types and no new tables.
 
 **Changelog since 1.2:** §4.4 Drift rules no longer claim every sync table has `deletedAt`. The default four-column shape stands; exemptions match `DATA-MODEL.md` §1.2. Filter `deletedAt.isNull()` only on tables that have the column. G1 `rejectedAt` stock and mark rules are unchanged.
 
@@ -196,7 +198,8 @@ class ProductRepository {
     await _syncQueue.enqueue(
       eventType: product.id.present ? 'PRODUCT_UPDATED' : 'PRODUCT_CREATED',
       payload: product.toJson(),
-      referenceId: product.id.value,
+      referenceId: null, // standalone PRODUCT_* — never the product's own id
+
     );
   }
 }
@@ -237,6 +240,7 @@ class ProductListScreen extends ConsumerWidget {
 - UI never imports `package:drift` — only the repository does
 - Providers are defined in `features/<name>/providers/` — never inside a widget file
 - `StateNotifier` for mutable state (cart, form), `StreamProvider` for DB streams, `FutureProvider` for one-shot async, `Provider` for sync dependencies
+- Standalone queue events (`PRODUCT_*`, `CATEGORY_*`, `DEVICE_ACTIVATED`, `INVENTORY_ADJUSTED` / `DAMAGED` / `RETURNED`) enqueue with `referenceId: null`. Only causally grouped events share a `reference_id` (`SYNC-PROTOCOL.md` §2.5). Never copy the row's own `id` into `referenceId` to fill the field.
 
 ### 4.4 Drift (SQLite) — how to write it
 
@@ -680,31 +684,60 @@ pkg/db/migrations/
 
 ### 5.8 Standard response format
 
+Binding shape is `API-SPEC.md` §1.4. Success is `{ data, meta }`. Error is `{ error, meta }`. There is no `success` boolean. `error` is an object, not a string.
+
 ```go
 // pkg/response/response.go
 
+type Meta struct {
+  RequestID string `json:"request_id"`
+}
+
+type APIError struct {
+  Code                 string `json:"code"`
+  Message              string `json:"message"`
+  Field                string `json:"field,omitempty"`
+  RetryAfter           *int   `json:"retry_after,omitempty"`            // ACCOUNT_LOCKED
+  BlockingProductCount *int   `json:"blocking_product_count,omitempty"` // CATEGORY_HAS_PRODUCTS
+}
+
 type APIResponse struct {
-  Success bool        `json:"success"`
-  Data    interface{} `json:"data,omitempty"`
-  Error   string      `json:"error,omitempty"`
+  Data  interface{} `json:"data,omitempty"`
+  Error *APIError   `json:"error,omitempty"`
+  Meta  Meta        `json:"meta"`
+}
+
+func requestID(c *gin.Context) string {
+  return c.GetString("request_id")
 }
 
 func OK(c *gin.Context, data interface{}) {
-  c.JSON(200, APIResponse{Success: true, Data: data})
+  c.JSON(200, APIResponse{Data: data, Meta: Meta{RequestID: requestID(c)}})
 }
 
 func BadRequest(c *gin.Context, message string) {
-  c.JSON(400, APIResponse{Success: false, Error: message})
+  c.JSON(400, APIResponse{
+    Error: &APIError{Code: "VALIDATION_ERROR", Message: message},
+    Meta:  Meta{RequestID: requestID(c)},
+  })
 }
 
 func Unauthorized(c *gin.Context) {
-  c.JSON(401, APIResponse{Success: false, Error: "Authentication required"})
+  c.JSON(401, APIResponse{
+    Error: &APIError{Code: "UNAUTHORIZED", Message: "Authentication required"},
+    Meta:  Meta{RequestID: requestID(c)},
+  })
 }
 
 func InternalError(c *gin.Context, message string) {
-  c.JSON(500, APIResponse{Success: false, Error: message})
+  c.JSON(500, APIResponse{
+    Error: &APIError{Code: "INTERNAL_ERROR", Message: message},
+    Meta:  Meta{RequestID: requestID(c)},
+  })
 }
 ```
+
+`response.OK` / `response.BadRequest` / `response.Unauthorized` / `response.InternalError` in §5.3 and §5.4 use these helpers. Do not add a `success` field and do not flatten `error` to a string — `retry_after` and `blocking_product_count` have nowhere to go on a string.
 
 ---
 

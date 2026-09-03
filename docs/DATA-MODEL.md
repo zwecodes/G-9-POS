@@ -1,9 +1,11 @@
 # G9POS Data Model
 
-**Version:** 1.6
+**Version:** 1.7
 **Status:** Draft
 **Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.6:** Closes both remaining §9 decisions. (1) `sales.server_received_at` is now on SQLite as well as PostgreSQL — a server-stamped copy for local void UX after sync. The server remains the sole enforcer of the shop-day window; the device never treats a local clock or `created_at` as authority. (2) The first owner is created by a one-time `POST /v1/setup`; later staff rows are created by the owner from the dashboard (`API-SPEC.md` §2.5–§2.6). `users` gains the login columns the existing auth flow already required (`username`, `password_hash` on PostgreSQL). No new event types and no new tables.
 
 **Changelog since 1.5:** No schema changes. §9.1 no longer treats the old void confirmation ("This cannot be undone") as an unresolved contradiction — that copy is settled by `SYNC-PROTOCOL.md` §11.2 / `UI-GUIDELINES.md` v1.1. Whether `sales.server_received_at` is mirrored into SQLite remains open; closing §11.2 did not decide it.
 
@@ -37,7 +39,7 @@ The default shape for a device-originated business record is four sync columns: 
 |---|---|---|---|
 | Append-only event log | `inventory_events` (§3.5) | `updated_at`, `deleted_at` | Rows are immutable once written. There is no update path and no soft delete: a mistake is corrected by *appending* a compensating event, never by editing or hiding an existing one (`SYNC-PROTOCOL.md` §4.1). Adding `deleted_at` here would make stock silently mutable and defeat the event log, so that prohibition stands unchanged. **One narrow carve-out, settled in 1.5:** SQLite — and only SQLite — carries a local-only `rejected_at` marker for rows belonging to an event or group the server *permanently rejected*, which were therefore never accepted anywhere (§3.5). It is not a soft delete and not a delete path: it can only ever be set while `synced_at IS NULL`, so no server-accepted row is reachable by it, and accepted history remains exactly as immutable as before. See §8 and `SYNC-PROTOCOL.md` §11.1. |
 | Nested payload children | `sale_items` (§3.7), `supplier_order_items` (§3.11) | `updated_at`, `deleted_at`, `device_id` | These never sync as independent events. They travel inside their parent's event payload — per `API-SPEC.md` §5, `SALE_CREATED` "carries the sale + its `sale_items` in one event payload" and `SUPPLIER_ORDER_CREATED` "carries nested order items in the payload (no separate item-creation events)". The parent row carries the sync columns for the whole unit. |
-| Not device-originated | `devices` (§3.2, server only), `sync_queue` (§3.12, SQLite only), `users` (§3.1) | varies — see §3 | `devices` is the server-side registry and `sync_queue` is local outbound state; neither is replicated between devices (§4). `users` has no `device_id` and there is no `USER_*` event type in `API-SPEC.md` §5, so user records are not created by the sync queue — how they *are* provisioned is an open decision (§9). |
+| Not device-originated | `devices` (§3.2, server only), `sync_queue` (§3.12, SQLite only), `users` (§3.1) | varies — see §3 | `devices` is the server-side registry and `sync_queue` is local outbound state; neither is replicated between devices (§4). `users` has no `device_id` and there is no `USER_*` event type in `API-SPEC.md` §5, so user records are not created by the sync queue. Provisioning is server-side: one-time `POST /v1/setup` for the first owner, then owner-created staff via `POST /v1/users` (`API-SPEC.md` §2.5–§2.6). Devices receive user rows (never `password_hash`) on first-run pull and `GET /v1/sync/pull`. |
 
 The soft-delete principle below applies to every table that **has** a `deleted_at` column. It is not a claim that every table has one.
 
@@ -85,19 +87,23 @@ sync_queue                     (local SQLite only, §3.12)
 
 ### 3.1 `users`
 
-Stores authenticated users. For launch, this will be one owner account.
+Stores authenticated users. Launch starts with one owner row; staff rows are added later. Users are **not** sync-queue events.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | UUID | Primary key |
 | `name` | TEXT | Display name |
-| `pin` | TEXT | Hashed 4-digit PIN for quick re-auth on device |
+| `username` | TEXT | Login identifier. **PostgreSQL only.** Required and unique for `role = owner`. NULL for staff — staff do not use `POST /v1/auth/login`. |
+| `password_hash` | TEXT | Server password hash. **PostgreSQL only.** Required for `role = owner`. NULL for staff. Never stored in SQLite and never included in sync-pull or first-run payloads. |
+| `pin` | TEXT | Hashed 4-digit PIN for on-device re-auth. Present for owner and staff. The server stores the hash so it can distribute it to devices; it never accepts a PIN as a login factor (`API-SPEC.md` §2.4). |
 | `role` | TEXT | `owner` or `staff` |
 | `created_at` | INTEGER | Unix ms |
 | `updated_at` | INTEGER | Unix ms |
 | `deleted_at` | INTEGER | Soft delete |
 
-**SQLite only:** `jwt_access_token`, `jwt_refresh_token`, `jwt_expires_at` — stored in `flutter_secure_storage`, not in Drift table.
+**Provisioning (resolved 1.7):** the first owner is inserted by `POST /v1/setup` when the table is empty. After that, only the owner creates staff, through the dashboard (`POST /v1/users`). See `API-SPEC.md` §2.5–§2.6. There is still no `USER_*` event type.
+
+**SQLite only:** `jwt_access_token`, `jwt_refresh_token`, `jwt_expires_at` — stored in `flutter_secure_storage`, not in Drift table. SQLite `users` holds `id`, `name`, `pin`, `role`, and the timestamps so a device can unlock with a staff PIN offline. It does not hold `username` or `password_hash`.
 
 **Note:** the dashboard's `dashboard_viewer` role (`API-SPEC.md` §1.8) is a JWT claim issued at login time, not a stored value in this `role` column — the underlying `users.role` stays `owner`/`staff` regardless of which context a token was issued for.
 
@@ -251,15 +257,17 @@ One row per completed sale transaction.
 | `voided_by` | UUID | FK → users — null if not voided |
 | `void_reason` | TEXT | Required if voided |
 | `created_at` | INTEGER | Unix ms — device clock |
-| `server_received_at` | INTEGER | Unix ms — server clock. **PostgreSQL only.** Stamped when the sale's `SALE_CREATED` event group commits (`API-SPEC.md` §6). This is the anchor for the same-shop-day void window. (Added 1.2.) |
+| `server_received_at` | INTEGER | Unix ms — server clock. Stamped when the sale's `SALE_CREATED` event group commits (`API-SPEC.md` §6). This is the anchor for the same-shop-day void window. On SQLite the column is a **mirror of the server stamp**, nullable until the originating device learns it via `GET /v1/sync/pull` (the stamp is server-originated metadata, so pull returns it even for sales this device created). Never written by the device on `SALE_CREATED`. (Added 1.2 on PostgreSQL; mirrored to SQLite in 1.7.) |
 | `synced_at` | INTEGER | Unix ms (SQLite only) |
 
 **Rules:**
 - `status` starts as `completed`. Only the owner can set it to `voided`.
-- Voiding is only allowed on the same **shop-calendar day** as `server_received_at` (not device `created_at`) — see §1.1 and `API-SPEC.md` §1.7.
+- Voiding is only allowed on the same **shop-calendar day** as `server_received_at` (not device `created_at`) — see §1.1 and `API-SPEC.md` §1.7. The **server** is the sole enforcer of that rule (`API-SPEC.md` §5). A local copy of the stamp does not authorize a void the server would refuse.
 - Voiding a sale automatically generates `INVENTORY_VOIDED` events for all line items, submitted together as one atomic group per `SYNC-PROTOCOL.md` §2.5.
 
-**Why `server_received_at` is server-side only (added in 1.2):** the void window is deliberately anchored to the server clock in a fixed shop timezone, because device clocks drift (`SYNC-PROTOCOL.md` §8, "Clock skew between devices") and §4 of this document states the device never resolves "which shop-day" locally. The consequence is explicit: **the device cannot pre-compute whether a void is still inside the window.** It submits the `SALE_VOIDED` group optimistically, and the server is the sole enforcer (`API-SPEC.md` §5). If the window has closed, the group is permanently rejected and the device reverts its local void per `SYNC-PROTOCOL.md` §4.4. Whether the app should additionally *hide* the void action once a sale is no longer same-day — which would need this value mirrored to SQLite — is an open decision (§9), not settled by this version.
+**Local usage of the mirrored stamp (added 1.7):** after sync, the device may use SQLite `server_received_at` plus the same `SHOP_TIMEZONE` constant (`API-SPEC.md` §1.7) to hide or disable the void action once that stamp's shop-calendar day has ended. This is UX/state only. It does not replace the server check, does not use the device clock or `created_at` as the window, and does not make an optimistic void that still gets submitted any more authoritative. While `server_received_at` is still NULL (sale not yet accepted, or pull has not returned the stamp), the device treats the sale as still voidable and submits `SALE_VOIDED` optimistically; if the window has closed, the server rejects and the device reverts per `SYNC-PROTOCOL.md` §4.4.
+
+**Why the stamp is server-authored (added in 1.2, mirror decided in 1.7):** the void window is anchored to the server clock in a fixed shop timezone because device clocks drift (`SYNC-PROTOCOL.md` §8, "Clock skew between devices"). The device may *display* window state from the mirrored stamp; it must not invent a local authority that overrides the server.
 
 ---
 
@@ -386,11 +394,11 @@ Line items within a supplier order.
 | ID type | TEXT (UUID string) | UUID native type |
 | Timestamps | INTEGER (Unix ms) | TIMESTAMPTZ |
 | Booleans | INTEGER (0/1) | BOOLEAN |
-| Extra columns | `synced_at` on most tables; `rejected_at` on `inventory_events` (§3.5, local-only, added 1.5) | `server_received_at` on `inventory_events` (§3.5) and `sales` (§3.6) |
+| Extra columns | `synced_at` on most tables; `rejected_at` on `inventory_events` (§3.5, local-only, added 1.5). `sales.server_received_at` is present on both dialects (mirrored, 1.7). `users` omits `username` / `password_hash`. | `server_received_at` on `inventory_events` (§3.5) and `sales` (§3.6). `users.username` and `users.password_hash` (1.7). |
 | sync_queue | Present | Not present |
 | `devices` (§3.2) | Not present | Present |
 | Stock computation | Cached locally, recomputed after sync, excluding rows marked `rejected_at` (§3.5) | Always computed from events |
-| Date/day resolution | N/A — device only stores Unix ms, never computes "which shop-day" locally | `SHOP_TIMEZONE` constant applied server-side for all day-boundary logic (§1.1) |
+| Date/day resolution | Device may apply `SHOP_TIMEZONE` to a **server-stamped** `sales.server_received_at` for void-action visibility only (§3.6). It must not use device `created_at` or the local clock as the void-window authority. | `SHOP_TIMEZONE` constant applied server-side for all day-boundary logic (§1.1). Server remains the sole enforcer of the void window. |
 
 ---
 
@@ -404,6 +412,7 @@ CREATE INDEX idx_products_barcode ON products(barcode);
 
 -- Fast sale history
 CREATE INDEX idx_sales_created_at ON sales(created_at);
+CREATE INDEX idx_sales_server_received_at ON sales(server_received_at);
 CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id);
 
 -- Sync queue flush order
@@ -458,8 +467,9 @@ On first install and login, the server sends:
 2. All `categories`
 3. All `suppliers`
 4. `inventory_events` from the last **90 days**
-5. `sales` and `sale_items` from the last **90 days**
+5. `sales` and `sale_items` from the last **90 days**, including `sales.server_received_at` when the server has stamped it
 6. `expenses` from the last **90 days**
+7. `users` rows needed for on-device PIN unlock (`id`, `name`, `pin`, `role`, timestamps, `deleted_at`) — never `password_hash`, never owner credentials
 
 Delivered in chunks of 200 rows per request. Download order: products and categories first (so the POS is usable), then history. If download is interrupted, it resumes from the last confirmed chunk on next app open.
 
@@ -477,20 +487,14 @@ Delivered in chunks of 200 rows per request. Download order: products and catego
 | Category deletion | Blocked while active products reference it — see §3.3 (added 1.1) |
 | Lost device recovery | `devices.revoked_at`, set remotely by the owner — see §3.2 (added 1.1) |
 | `inventory_events` soft delete | None — the table is append-only and has no `deleted_at`. Corrections are appended, never applied in place. See §1.2 and §3.5 (added 1.2) |
-| Void-window anchor | `sales.server_received_at`, PostgreSQL only. Server is the sole enforcer; the device submits optimistically and reverts on rejection. See §3.6 (added 1.2) |
+| Void-window anchor | `sales.server_received_at`, server-stamped. PostgreSQL is the authority; SQLite holds a mirror for void-action UX after sync. Server remains the sole enforcer; the device submits optimistically when the stamp is still NULL and reverts on rejection. See §3.6 (added 1.2, mirrored 1.7) — was §9 decision 1 |
+| First owner and staff provisioning | One-time `POST /v1/setup` while `users` is empty; afterward staff via `POST /v1/users` from the dashboard. No `USER_*` events. See §3.1 and `API-SPEC.md` §2.5–§2.6 (added 1.7) — was §9 decision 2 |
 | Standard sync columns | Four by default (`created_at`, `updated_at`, `deleted_at`, `device_id`), with three documented exemption classes — see §1.2 (added 1.2) |
 | Undoing an unsynced `inventory_events` row from a permanently rejected group | Local-only `rejected_at` marker on SQLite, excluded from the device's stock sum. Never a hard delete, never replicated, and settable only while `synced_at IS NULL`, so accepted rows stay immutable. `updated_at` and `deleted_at` remain prohibited on this table. See §1.2, §3.5 and `SYNC-PROTOCOL.md` §11.1 — was §9 decision 3 (resolved 1.5) |
 | `reference_id` on standalone inventory events | NULL for `INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, and `INVENTORY_RETURNED`. Grouped types (`INVENTORY_SOLD`, `INVENTORY_VOIDED`, `INVENTORY_RESTOCKED`) still carry the parent sale or order. No adjustments, damage, or return table exists. See §3.5 and `SYNC-PROTOCOL.md` §2.5 (added 1.5) |
 
 ---
 
-## 9. Open Decisions (added in 1.2, extended in 1.3, decision 3 resolved in 1.5)
+## 9. Open Decisions (added in 1.2, all resolved as of 1.7)
 
-These surfaced while resolving inconsistencies in 1.2 and 1.3. None is answerable from existing documentation, so they are recorded here rather than guessed at. **Each needs a decision before the affected code is written.**
-
-Decision 3, how a device undoes an unsynced `inventory_events` row from a permanently rejected group, was settled in 1.5 and now appears in §8. `SYNC-PROTOCOL.md` §11.1 records the reasoning.
-
-| # | Open decision | What is already fixed | What is undecided | Who decides |
-|---|---|---|---|---|
-| 1 | Should `sales.server_received_at` be mirrored into SQLite? | The column exists server-side and the server is the sole enforcer of the void window (§3.6). Correctness does not depend on this decision. **`SYNC-PROTOCOL.md` §11.2 is settled separately** (honest optimistic void): confirmation copy no longer promises finality; `CANCELLED` follows `status = voided`; a rejected void is explained on the sync status screen. That does **not** close this row. | Still a UX question only: without a local copy, the app shows the void action on *every* sale and some attempts fail and roll back (`SYNC-PROTOCOL.md` §4.4). With a local copy it could grey the action out once the shop-day has passed. The second is friendlier for a non-technical operator but adds a field to the sync-pull payload and a local shop-day computation that §4 currently forbids. | Product owner, with `UI-GUIDELINES.md` — needed before the sales-history screen is built if gating is desired. |
-| 2 | How is a `users` row created? | `users` (§3.1) is documented as a table, and `role` (`owner`/`staff`) is used throughout `API-SPEC.md`. | There is no `USER_CREATED`/`USER_UPDATED` event type in `API-SPEC.md` §5, and `API-SPEC.md` §1.1 forbids adding a REST write for business records. So staff accounts currently have no creation path at all. §3.1 notes launch is "one owner account", which defers but does not answer the question. | Product owner — decide whether staff accounts are in v1 scope at all. If yes, `API-SPEC.md` must define the mechanism; if no, the `staff` role should be marked post-launch. |
+Decision 3 was settled in 1.5 (`rejected_at` / `SYNC-PROTOCOL.md` §11.1). Decisions 1 and 2 were settled in 1.7 and now appear in §8. There are **no remaining open decisions** in this document.

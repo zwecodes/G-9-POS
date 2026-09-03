@@ -1,9 +1,11 @@
 # G9POS System Architecture
 
-**Version:** 1.4  
+**Version:** 1.5  
 **Status:** Draft  
 **Last updated:** 2026-09-04  
 **Author:** Architecture Team
+
+**Changelog since 1.4:** Status and the two dashboard facts required by `DATA-MODEL.md` §9.2 / `API-SPEC.md` 1.6: first-owner setup, and staff created from the dashboard. §13 versions updated. No layering change.
 
 **Changelog since 1.3:** Status-only. §13 records G1 and `SYNC-PROTOCOL.md` §11.2 as resolved, and updates document versions to match the tree: `SYNC-PROTOCOL.md` v1.6, `DATA-MODEL.md` v1.6, `API-SPEC.md` v1.5, `UI-GUIDELINES.md` v1.1, `CODING-STANDARDS.md` v1.3. The three void-copy gaps previously listed against `UI-GUIDELINES.md` are closed by §11.2. No layering or request-flow change.
 
@@ -250,6 +252,8 @@ WebSocket is used exclusively for the remote dashboard — it pushes live sale a
 
 ### First login (requires internet)
 
+The first owner account does not exist until `POST /v1/setup` has run once (`API-SPEC.md` §2.5). After that, login is unchanged:
+
 ```
 Owner enters username + password
   │
@@ -367,7 +371,12 @@ What you **cannot** do remotely (intentional):
 - Change prices or products
 - Approve or reject anything
 
-The shop operates autonomously. You observe and advise — you don't intervene in real-time operations from far away. This keeps the system simple and prevents accidental remote changes during a busy shop day.
+What you **can** do remotely besides observe (account administration only):
+
+- Create staff accounts (`POST /v1/users`)
+- Revoke a lost device (`POST /v1/devices/{id}/revoke`)
+
+The shop operates autonomously. You observe and advise — you don't intervene in real-time sales or inventory from far away. Staff provisioning and device revoke are administration, not shop-floor writes.
 
 ---
 
@@ -377,7 +386,7 @@ The shop operates autonomously. You observe and advise — you don't intervene i
 |---------|-----------|
 | JWT theft on device | Tokens in `flutter_secure_storage` (AES encrypted) |
 | Offline JWT abuse | Acceptable risk for single-operator shop — 30-day refresh token expiry |
-| API access without auth | All endpoints require valid JWT except `/auth/login` |
+| API access without auth | All endpoints require valid JWT except `POST /v1/auth/login` and `POST /v1/setup` (one-time first-owner bootstrap; see `API-SPEC.md` §2.5) |
 | Staff privilege escalation | Role checked server-side on every request, not just client-side |
 | Data in transit | HTTPS everywhere, no plain HTTP |
 | Database exposure | PostgreSQL not exposed publicly — only Go API is internet-facing |
@@ -408,15 +417,15 @@ Filenames below are the actual on-disk names. Earlier versions of this table use
 
 | Document | Status | Purpose |
 |----------|--------|---------|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.6, §11 settled (G1 / §11.1 and honest optimistic void / §11.2) | Sync design, failover, conflict resolution, rejection reconciliation |
-| `DATA-MODEL.md` | ✅ Done — v1.6, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
-| `API-SPEC.md` | ✅ Done — v1.5 | All REST endpoints, sync event types, WebSocket events |
-| `ARCHITECTURE.md` | ✅ Done — v1.4 | This document |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.7, §11 settled (G1 / §11.1 and honest optimistic void / §11.2) | Sync design, failover, conflict resolution, rejection reconciliation |
+| `DATA-MODEL.md` | ✅ Done — v1.7, 0 open decisions | Database schema for SQLite and PostgreSQL |
+| `API-SPEC.md` | ✅ Done — v1.6 | All REST endpoints, sync event types, WebSocket events |
+| `ARCHITECTURE.md` | ✅ Done — v1.5 | This document |
 | `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration. Supersedes §4 of this document, which is a summary. Label printer confirmed post-launch by its §6. |
 | `UI-GUIDELINES.md` | ✅ Complete — v1.1 | Design rules for non-technical users. Void copy, `CANCELLED` derivation, and the deferred-rejection notice are specified in its §5.5, §5.8 and §6 (`SYNC-PROTOCOL.md` §11.2). |
-| `CODING-STANDARDS.md` | 🟡 Written at v1.3 — 2 conformance fixes needed | Repo layout, layering, naming, testing. Its §5.8 must conform to `API-SPEC.md` §1.4, and §4.3 to `SYNC-PROTOCOL.md` §2.5. |
+| `CODING-STANDARDS.md` | ✅ Complete — v1.4 | Repo layout, layering, naming, testing. Envelope matches `API-SPEC.md` §1.4; `reference_id` examples match `SYNC-PROTOCOL.md` §2.5. |
 | `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
 | `DEPLOYMENT.md` | 🔲 Not written | §9 of this document is the only current source and is a summary. |
 | `SECURITY.md` | 🔲 Not written | §11 of this document is the only current source and is a summary. |
 
-**What 🟡 means in this table (added 1.2).** `CODING-STANDARDS.md` (v1.3) is written in full, but two conformance items named in its row above remain open. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.
+**What 🟡 means in this table (added 1.2).** No current documentation row is 🟡. The mark meant "written, reconciliation outstanding" when `CODING-STANDARDS.md` still had C1/C2 open.

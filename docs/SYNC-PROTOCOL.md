@@ -1,9 +1,11 @@
 # G9POS Sync Protocol
 
-**Version:** 1.6
+**Version:** 1.7
 **Status:** Draft
 **Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.6:** Records the close of `DATA-MODEL.md` §9.1: `sales.server_received_at` is mirrored into SQLite and returned on `GET /v1/sync/pull` as server-originated sale metadata (including sales this device created). The server remains the sole enforcer of the void window. §2.5's C2 conflict note is removed — `CODING-STANDARDS.md` §4.3 now enqueues standalone events with `referenceId: null`. G1 / §11.2 behaviour is unchanged.
 
 **Changelog since 1.5:** §11.2 is resolved as honest optimistic void. Optimistic local void remains; `VOID_WINDOW_CLOSED` still uses the §4.4 / G1 rollback already specified. `CANCELLED` is the history rendering of `sales.status = voided` and disappears when revert restores `completed`. The required owner notice lives on the existing sync status screen — plain language, names the sale, never a popup or modal, never in the sale path. Mirroring `sales.server_received_at` into SQLite is **not** required to close this and remains `DATA-MODEL.md` §9.1. G1 / `rejected_at` is unchanged.
 
@@ -132,7 +134,7 @@ This is worth stating as an explicit rule because setting it to the entity's own
 
 Concretely: a `PRODUCT_UPDATED` for product `P` has `reference_id = NULL`. An `INVENTORY_SOLD` for product `P` arising from sale `S` has `reference_id = S` — the sale that caused it, never `P`, and never the event's own `id`. The same NULL rule applies to standalone inventory events: `INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, and `INVENTORY_RETURNED` have `reference_id = NULL`. Grouped inventory events keep the parent: `INVENTORY_VOIDED` uses the sale, `INVENTORY_RESTOCKED` uses the supplier order. There is no adjustments, damage, or return table to point at.
 
-**Confirmed conflict with `CODING-STANDARDS.md` §4.3 (v1.2).** The `ProductRepository.saveProduct` example there enqueues a `PRODUCT_CREATED`/`PRODUCT_UPDATED` with `referenceId: product.id.value` — consequence 2 above, verbatim, in the snippet that section presents as the pattern every feature must copy. Two independent offline edits to the same product would share a `reference_id` and be merged into one atomic group, so an old queued edit could be reverted or retried together with an unrelated new one. That call must pass `referenceId: null`. This document owns sync semantics, so the example is what changes here, not the rule.
+**Conformance (closed in `CODING-STANDARDS.md` v1.4).** The `ProductRepository.saveProduct` example now enqueues standalone `PRODUCT_*` events with `referenceId: null`. This section's rule did not move.
 
 ---
 
@@ -543,7 +545,11 @@ Request params:
 - `last_sync_at` — Unix timestamp of last successful pull
 - `device_id`
 
-Response: all server-side changes since `last_sync_at` that this device hasn't originated.
+Response: all server-side changes since `last_sync_at` that this device hasn't originated, **plus** server-authored fields on rows this device did originate when those fields did not exist at write time.
+
+In particular, each `sales` row includes `server_received_at` once the server has stamped the `SALE_CREATED` group (`DATA-MODEL.md` §3.6). That stamp is server-originated metadata: pull returns it to the originating device so SQLite can mirror it. The meaning of the field is unchanged — it is still the server clock at commit, still the void-window anchor, and it is still **not** sent up in the `SALE_CREATED` payload.
+
+Pull also includes `users` rows needed for on-device PIN unlock (`id`, `name`, `pin`, `role`, timestamps, `deleted_at`). It never includes `password_hash`.
 
 ---
 
@@ -561,7 +567,8 @@ Response: all server-side changes since `last_sync_at` that this device hasn't o
 | `reference_id` on standalone events | Always NULL. It is a causal-group key only, never the entity's own `id` — see §2.5 (added in 1.2) |
 | Device activation mechanism | `DEVICE_ACTIVATED` queue event only. No REST endpoint — failover must work with no internet (§5.3) (added in 1.2) |
 | Secure-storage key prefix | `g9pos_*`. No migration required — no shipped build exists (§6.4) (added in 1.2) |
-| Honest optimistic void | Optimistic local void remains. `VOID_WINDOW_CLOSED` still reverts per §4.4 / G1. `CANCELLED` is derived from `sales.status = voided` and is absent after revert restores `completed`. Deferred owner notice lives on the sync status screen — never a modal, never in the sale path. Mirroring `server_received_at` is not required and remains `DATA-MODEL.md` §9.1. See §11.2 (closed in 1.6) |
+| Honest optimistic void | Optimistic local void remains. `VOID_WINDOW_CLOSED` still reverts per §4.4 / G1. `CANCELLED` is derived from `sales.status = voided` and is absent after revert restores `completed`. Deferred owner notice lives on the sync status screen — never a modal, never in the sale path. See §11.2 (closed in 1.6) |
+| Mirrored `sales.server_received_at` | SQLite holds a copy for void-action UX after sync. Server remains the sole enforcer. Pull returns the stamp as server-originated metadata (`DATA-MODEL.md` §3.6, closed 1.7) |
 
 ---
 
@@ -612,15 +619,15 @@ The cost 1.3 attributed to this option — that it makes the SQLite and PostgreS
 
 ### 11.2 Honest optimistic void (resolved in 1.6)
 
-**Resolution: keep optimistic local void; tell the truth in the UI; put the deferred notice on the existing sync status screen.** `VOID_WINDOW_CLOSED` continues to use the already-resolved §4.4 / G1 rollback. No new schema, no pending badge, no local shop-day. Presentation lives in `UI-GUIDELINES.md` (v1.1) §5.5, §5.8 and §6.
+**Resolution: keep optimistic local void; tell the truth in the UI; put the deferred notice on the existing sync status screen.** `VOID_WINDOW_CLOSED` continues to use the already-resolved §4.4 / G1 rollback. No pending badge. Presentation lives in `UI-GUIDELINES.md` (v1.1) §5.5, §5.8 and §6. Local void-action visibility may now use the mirrored `sales.server_received_at` (`DATA-MODEL.md` §3.6, closed 1.7); that does not reopen this decision.
 
 **What was already settled** and is unchanged by this: the write path, the server window, and the revert. A void is applied to SQLite immediately (§1, core rule 2). The server is the sole enforcer of the same-shop-day rule (`API-SPEC.md` §5, `DATA-MODEL.md` §3.6). On `VOID_WINDOW_CLOSED` the device still: drops the group from the queue, restores `sales.status = completed` and clears the three void columns, sets `rejected_at` on the unsynced `INVENTORY_VOIDED` rows, recomputes stock, and emits no compensating event (§4.4, §11.1, Scenario G). G1 / `rejected_at` is not reopened.
 
 **What this decides.**
 
-1. **Optimistic local void remains.** The owner can still cancel a sale with no internet. The device still cannot evaluate the shop-day window locally (`DATA-MODEL.md` §3.6, §4), so it still submits and lets the server refuse.
+1. **Optimistic local void remains.** The owner can still cancel a sale with no internet. After the stamp is mirrored, the device may hide the void action for UX (`DATA-MODEL.md` §3.6). That is not local authority: the server still refuses `VOID_WINDOW_CLOSED`, and a still-NULL stamp is still submitted optimistically.
 2. **`CANCELLED` is not a stored field.** It is the sales-history rendering of `sales.status = voided` (`UI-GUIDELINES.md` §5.8). After §4.4 restores `status = completed`, the badge is absent because the sale is no longer voided. No extra column, no pending badge, no new UI state.
 3. **The owner notice for a rejected void is required, and it has a home.** Plain language, names the affected sale, lives on the **sync status screen** already opened by the header sync icon (`UI-GUIDELINES.md` §6). Never a popup or modal — §6 already forbids that, and a rejection can arrive minutes to days later, often while the owner is mid-sale. Never in the sale path (§4.4). Example tone, owned by `UI-GUIDELINES.md`: *"Sale S-00142 could not be cancelled. The shop day had ended."*
-4. **Mirroring `sales.server_received_at` into SQLite is not required to close this.** That remains `DATA-MODEL.md` §9.1. Gating the void action after the shop-day would shrink how often `VOID_WINDOW_CLOSED` fires; it would not replace §4.4, and it would add a pull-payload field plus a local shop-day computation that `DATA-MODEL.md` §4 currently forbids. Correctness does not depend on it.
+4. **Mirroring `sales.server_received_at` is now decided** (`DATA-MODEL.md` §3.6 / §8, closed 1.7). It was not required to close *this* decision in 1.6, and closing it later does not replace §4.4. The server remains the sole enforcer.
 
-**What this does not change.** G1, `rejected_at`, the wire contract in `API-SPEC.md`, the §4.4 revert table, or the device's inability to pre-compute the void window.
+**What this does not change.** G1, `rejected_at`, the `SALE_CREATED` / `SALE_VOIDED` payloads, the §4.4 revert table, or honest confirmation copy.
