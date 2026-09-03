@@ -1,5 +1,8 @@
 # G9 POS
 <!-- one page that states the project in a paragraph and links out to every other doc, rather than restating architecture -->
+
+> **This page is a summary, not a source of truth.** The sections below restate material owned by other documents. Where they disagree, the specification wins: `API-SPEC.md` for endpoints and events, `DATA-MODEL.md` for schema, `SYNC-PROTOCOL.md` for sync and conflict behaviour, `HARDWARE-INTEGRATION.md` for hardware, `ARCHITECTURE.md` §3 and §10 for device roles and remote-dashboard limits. Do not resolve a question from this page alone.
+
 ## Project Overview
 
 G9POS is a production-quality offline-first Point of Sale (POS) system for small retail shops, beginning with a motorcycle accessories shop.
@@ -47,7 +50,7 @@ Bluetooth Barcode Scanner
 
 Bluetooth Receipt Printer
 
-Bluetooth Label Printer
+Bluetooth Label Printer — **post-launch, not in v1.** Deferred per `ARCHITECTURE.md` §4 and §12 (NIIMBOT B21).
 
 Internet is unreliable.
 
