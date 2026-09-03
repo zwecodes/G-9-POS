@@ -1,9 +1,11 @@
 # G9POS Data Model
 
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Draft
 **Last updated:** 2026-09-03
 **Author:** Architecture Team
+
+**Changelog since 1.3:** No schema changes. Reconciled against `CODING-STANDARDS.md` v1.1, readable for the first time this pass. §1.2 now cites the specific conflicting text — §4.4's *"Every table that participates in sync must have `createdAt`, `updatedAt`, `deletedAt`, `deviceId`"*, which is wrong for six of the tables in §3 — together with its companion rule *"Always filter `deletedAt.isNull()` in every read query"*, which is unsatisfiable against `inventory_events`. §9 decision 1 records that `UI-GUIDELINES.md` §5.5 already takes the un-gated branch of that decision and promises finality the server can refuse.
 
 **Changelog since 1.2:** No schema changes. Recorded one previously unstated conflict between §1.2 and the rejection-reconciliation rule in `SYNC-PROTOCOL.md` §4.4: a device that locally appended `inventory_events` rows for a group the server then permanently rejected must stop counting them, but §1.2 grants the table no update and no delete path. §1.2 now flags that case and §9 carries it as decision 3; `SYNC-PROTOCOL.md` §11.1 owns the decision and states the two available mechanisms. Both §1.2 and §3.5 will need updating once it is settled.
 
@@ -24,6 +26,8 @@ Every column of type `TEXT` storing an ISO date (`YYYY-MM-DD` — e.g. `expenses
 ### 1.2 Column conventions and exemptions (added in 1.2)
 
 The default shape for a device-originated business record is four sync columns: `created_at`, `updated_at`, `deleted_at`, `device_id`. Three classes of table deliberately depart from that default. Any coding standard, scaffold, or migration that asserts *"every synced table has all four"* is wrong — it must carve out the exemptions below, because the omissions are load-bearing, not oversights.
+
+**Confirmed conflict with `CODING-STANDARDS.md` §4.4 (v1.1).** Its Drift rules state: *"Every table that participates in sync must have `createdAt`, `updatedAt`, `deletedAt`, `deviceId`."* That is the unqualified claim this section exists to refute, and it is wrong for all three classes below — six of the tables in §3. The same section's *"Always filter `deletedAt.isNull()` in every read query"* is likewise unsatisfiable against `inventory_events`, which has no such column; the computed-stock query in §3.5 correctly has no `deleted_at` predicate. Both rules need the exemptions restated. This document owns the schema, so §4.4 is what changes.
 
 | Class | Tables | Omits | Why |
 |---|---|---|---|
@@ -451,6 +455,6 @@ These surfaced while resolving inconsistencies in 1.2 and 1.3. None is answerabl
 
 | # | Open decision | What is already fixed | What is undecided | Who decides |
 |---|---|---|---|---|
-| 1 | Should `sales.server_received_at` be mirrored into SQLite? | The column exists server-side and the server is the sole enforcer of the void window (§3.6). Correctness does not depend on this decision. | Purely a UX question: without a local copy, the app must show the void action on *every* sale and let some attempts fail and roll back (`SYNC-PROTOCOL.md` §4.4). With a local copy it could grey the action out once the shop-day has passed. The second is friendlier for a non-technical operator but adds a field to the sync-pull payload and a local shop-day computation that §4 currently forbids. | Product owner, with `UI-GUIDELINES.md` — needed before the sales-history screen is built. |
+| 1 | Should `sales.server_received_at` be mirrored into SQLite? | The column exists server-side and the server is the sole enforcer of the void window (§3.6). Correctness does not depend on this decision. | Purely a UX question: without a local copy, the app must show the void action on *every* sale and let some attempts fail and roll back (`SYNC-PROTOCOL.md` §4.4). With a local copy it could grey the action out once the shop-day has passed. The second is friendlier for a non-technical operator but adds a field to the sync-pull payload and a local shop-day computation that §4 currently forbids. **Now confirmed live (1.4):** `UI-GUIDELINES.md` §5.5 offers the void action on any sale in history with no shop-day gating, and promises "This cannot be undone" — so today's spec takes the first branch and states a guarantee the server can refuse. See `SYNC-PROTOCOL.md` §11.2; decide the two together. | Product owner, with `UI-GUIDELINES.md` — needed before the sales-history screen is built. |
 | 2 | How is a `users` row created? | `users` (§3.1) is documented as a table, and `role` (`owner`/`staff`) is used throughout `API-SPEC.md`. | There is no `USER_CREATED`/`USER_UPDATED` event type in `API-SPEC.md` §5, and `API-SPEC.md` §1.1 forbids adding a REST write for business records. So staff accounts currently have no creation path at all. §3.1 notes launch is "one owner account", which defers but does not answer the question. | Product owner — decide whether staff accounts are in v1 scope at all. If yes, `API-SPEC.md` must define the mechanism; if no, the `staff` role should be marked post-launch. |
 | 3 | How does a device undo an **unsynced** `inventory_events` row from a permanently rejected group? (added 1.3) | The table is append-only with no `deleted_at` and no update path (§1.2, §3.5), and accepted events are never rolled back (`SYNC-PROTOCOL.md` §4.1). Both stay true. | A permanently rejected group (`API-SPEC.md` §6.1) committed nothing server-side, but the device already appended its rows locally and sums them for stock (`SYNC-PROTOCOL.md` §3.4). Either §1.2 narrows to server-accepted rows and the device hard-deletes them, or `inventory_events` gains a local-only exclusion column that §1.2 currently forbids. Nothing in these documents chooses. | Architecture owner — **full statement and options in `SYNC-PROTOCOL.md` §11.1**, which owns this decision. §1.2 and §3.5 must be updated in the same change. |

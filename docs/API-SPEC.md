@@ -1,9 +1,11 @@
 # G9POS API Specification
 
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Resolved — no open questions
 **Last updated:** 2026-09-03
 **Author:** Architecture Team
+
+**Changelog since 1.3:** No contract changes. §1.4's conformance note, written in 1.3 against an unreadable `CODING-STANDARDS.md`, is now stated against its actual v1.1 text: §5.8's `APIResponse{Success, Data, Error string}` struct is the flat `{success, data, error}` form §1.4 rules out, and diverges on four counts (spurious `success` flag, `error` as a string rather than an object, no `error.code`, no `meta`). The note now also flags that the `response.*` helpers built on that struct and the §5.3/§5.4 handler examples calling them are affected, and that a flat string `error` has nowhere to carry `retry_after` (§2.1) or `blocking_product_count` (§5). §1.4 itself is unchanged and remains binding.
 
 **Changelog since 1.2:** Consistency pass — no new product decisions. (1) Added §6.1, the server-side contract for permanently rejected events: which conditions are permanent, the new `rejected[]` response array, and the `reason` codes. Up to 1.2 this document defined two permanent rejections (`CATEGORY_DELETED`, `SALE_VOIDED`) without saying how the device learns of them or what it should do, and `SYNC-PROTOCOL.md` §2.3 was dropping them silently. The device-side half is in `SYNC-PROTOCOL.md` §4.4. (2) Removed `POST /v1/sync/device/activate` (§3.2, §9) — it contradicted §1.1, was never actually specified in `SYNC-PROTOCOL.md` §5.3 as an endpoint, and cannot work during a no-internet failover; `DEVICE_ACTIVATED` is now registered in §5 as the queue event it always was. (3) Marked §1.4 binding, so a lower-authority document cannot restate the envelope in an incompatible shape. (4) Fixed stale cross-references: §1.5 pointed at §13 for rate limits (correct section is §12) and §6 pointed at §12.2 for WebSocket events (correct section is §11.2). (5) Retired §14, whose two follow-ups were completed in `SYNC-PROTOCOL.md` 1.1 and `DATA-MODEL.md` 1.1. (6) Corrected document filenames throughout to match the actual uppercase files, and refreshed §16.
 
@@ -58,7 +60,18 @@ Error:
 - **`error.code` is a machine-readable enum**, not a prose string. The whole table in §1.5 depends on it, and so do fields like `ACCOUNT_LOCKED`'s `retry_after` (§2.1) and `CATEGORY_DELETED`'s `blocking_product_count` (§5). A flat `error: "some message"` string cannot carry any of it.
 - **Success and error are distinguished by which key is present** (`data` vs `error`), not by a separate boolean flag.
 
-Any lower-authority document, helper struct, or scaffolding example that describes a different envelope — for example a flat `{ success, data, error }` object — is wrong and must be corrected to match this section rather than the reverse. Per the project's documentation hierarchy, a summary or standards document does not get to redefine a contract owned by this specification. `CODING-STANDARDS.md` is unwritten as of this version; when its Go response-helper section is authored, it must serialize exactly this shape.
+Any lower-authority document, helper struct, or scaffolding example that describes a different envelope — for example a flat `{ success, data, error }` object — is wrong and must be corrected to match this section rather than the reverse. Per the project's documentation hierarchy, a summary or standards document does not get to redefine a contract owned by this specification.
+
+**Confirmed conflict with `CODING-STANDARDS.md` §5.8 (v1.1).** That section's `APIResponse` struct is exactly the flat form ruled out above, and it does not conform on four counts:
+
+| `CODING-STANDARDS.md` §5.8 | This section requires |
+|---|---|
+| A `Success bool` field, serialized as `success` | No `success` flag — presence of `data` vs `error` is the signal |
+| `Error` is a `string` | `error` is an **object** carrying `code`, `message`, `field` |
+| No `code` field anywhere | `error.code` is a machine-readable enum from §1.5 |
+| No `meta` field anywhere | `meta.request_id` on **every** response |
+
+§5.8 is the lower-authority document and is the one that must change; this section does not move. The fix is not limited to the struct — the `response.OK` / `response.BadRequest` / `response.Unauthorized` / `response.InternalError` helpers built on it, and the `internal/products` handler examples in §5.3 and §5.4 that call them, all serialize the wrong shape and must be reworked together. As written, code scaffolded from §5.8 would satisfy no endpoint in this specification, and would break the `retry_after` (§2.1) and `blocking_product_count` (§5) fields outright, since a flat string `error` has nowhere to put them.
 
 ### 1.5 Error codes
 
@@ -409,11 +422,13 @@ All 7 items originally listed here (dashboard identity, login lockout, staff PIN
 
 | Document | Status | Purpose |
 |---|---|---|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.2 | Sync design, failover, conflict resolution, rejection reconciliation (§4.4) |
-| `DATA-MODEL.md` | ✅ Done — v1.2, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
-| `ARCHITECTURE.md` | ✅ Done — v1.1 | System architecture |
-| `API-SPEC.md` | ✅ Done — v1.3, 0 open questions | This document |
-| `HARDWARE-INTEGRATION.md` | 🔲 Not written | Scanner, printer protocols and Flutter integration |
-| `UI-GUIDELINES.md` | 🔲 Not written | Design rules for non-technical users |
-| `CODING-STANDARDS.md` | 🔲 Not written | Repo layout, layering, naming, testing. **Must conform to §1.4 when authored** — see that section. |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.4, 2 open decisions in its §11 | Sync design, failover, conflict resolution, rejection reconciliation (§4.4) |
+| `DATA-MODEL.md` | ✅ Done — v1.4, 3 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
+| `ARCHITECTURE.md` | ✅ Done — v1.2 | System architecture |
+| `API-SPEC.md` | ✅ Done — v1.4, 0 open questions | This document |
+| `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration |
+| `UI-GUIDELINES.md` | 🟡 Written at v1.0 — 3 gaps | Design rules for non-technical users. See `SYNC-PROTOCOL.md` §11.2. |
+| `CODING-STANDARDS.md` | 🟡 Written at v1.1 — **§5.8 does not conform to §1.4** | Repo layout, layering, naming, testing. See the conformance table in §1.4. |
 | `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
+
+**What 🟡 means in this table.** `CODING-STANDARDS.md` (v1.1) and `UI-GUIDELINES.md` (v1.0) are written in full at those versions, but reconciliation against them is still outstanding — where a row above names conformance fixes or gaps, those items are open, and for `CODING-STANDARDS.md` the §1.4 conformance table is that list. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.

@@ -1,9 +1,11 @@
 # G9POS System Architecture
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Status:** Draft  
 **Last updated:** 2026-09-03  
 **Author:** Architecture Team
+
+**Changelog since 1.1:** Reconciled §5 and §6 against `CODING-STANDARDS.md` v1.1, readable for the first time this pass (O6). (1) §5 moves `theme/` and `utils/` from `shared/` to `core/` and adds `shared/providers/` and `shared/router/`, matching §4.1 of that document. (2) §6 removes the stray `pkg/websocket/` — the hub is `internal/dashboard/websocket_hub.go`, and listing it in both places was internally contradictory — and adds the missing `pkg/timezone/` and `pkg/response/`. Both trees are summaries; `CODING-STANDARDS.md` owns code layout. The `categories` additions made in 1.1 are confirmed correct against §4.1 and §5.1, which added the same packages independently.
 
 **Changelog since 1.0:** Consistency pass; no architectural changes. (1) Added the missing `categories` feature and backend package to §5 and §6 — `API-SPEC.md` §5 defines `CATEGORY_CREATED`/`UPDATED`/`DELETED` events and `DATA-MODEL.md` §3.3 defines the table, but neither structure listed anywhere for them to live. (2) Added permanent-event-rejection handling to the §6 request flow and the §8 summary table, reflecting `API-SPEC.md` §6.1 and `SYNC-PROTOCOL.md` §4.4. (3) Rewrote §13, which still listed `api-spec.md` as "Next" long after it reached v1.3, and corrected every document filename to match the actual uppercase files.
 
@@ -141,6 +143,8 @@ apps/mobile/
       sync/            ← sync queue, flusher, conflict handler
       auth/            ← JWT cache, offline auth
       hardware/        ← scanner, printer HAL
+      theme/           ← AppColors, AppTextStyles, AppSpacing
+      utils/           ← currency, shop-timezone dates, UUIDs
     features/
       auth/            ← login, PIN screen
       pos/             ← sale screen, cart, checkout
@@ -154,9 +158,11 @@ apps/mobile/
       settings/        ← device management, sync status
     shared/
       widgets/         ← reusable UI components
-      theme/           ← colours, typography
-      utils/
+      providers/       ← app-wide providers (auth state, sync status)
+      router/          ← GoRouter configuration
 ```
+
+**Corrected in 1.2 (O6).** Up to 1.1 this tree placed `theme/` and `utils/` under `shared/`. `CODING-STANDARDS.md` §4.1 places both under `core/` and reserves `shared/` for `widgets/`, `providers/` and `router/`. That document owns code layout, so its placement is canonical and this summary now matches it. The distinction is load-bearing rather than cosmetic: `core/theme/` is what makes `AppColors.*` / `AppTextStyles.*` / `AppSpacing.*` importable without a feature depending on `shared/`, and `core/utils/date_utils.dart` is the single shop-timezone entry point required by `API-SPEC.md` §1.7.
 
 ### State management
 
@@ -196,9 +202,12 @@ services/backend/
     devices/          ← device registry, active POS tracking
   pkg/
     db/               ← PostgreSQL connection, migrations
-    middleware/        ← JWT validation, logging, rate limit
-    websocket/        ← WebSocket connection manager
+    middleware/       ← JWT validation, logging, rate limit
+    timezone/         ← SHOP_TIMEZONE constant and shop-day helpers
+    response/         ← standard JSON response helpers (must match API-SPEC.md §1.4)
 ```
+
+**Corrected in 1.2 (O6).** Up to 1.1 this tree listed a `pkg/websocket/` package *and* `internal/dashboard/` as "WebSocket hub, live push" — the hub cannot live in both. `CODING-STANDARDS.md` §5.1 places it at `internal/dashboard/websocket_hub.go` and has no `pkg/websocket/`, so the stray entry is removed. The same section's `pkg/timezone/` and `pkg/response/` were missing here and are now listed; `pkg/response/` is where §1.4's envelope is actually implemented, which is why it matters that it appears in the structure at all.
 
 ### Request flow (sync event)
 
@@ -395,13 +404,15 @@ Filenames below are the actual on-disk names. Earlier versions of this table use
 
 | Document | Status | Purpose |
 |----------|--------|---------|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.2 | Sync design, failover, conflict resolution, rejection reconciliation |
-| `DATA-MODEL.md` | ✅ Done — v1.2, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
-| `API-SPEC.md` | ✅ Done — v1.3 | All REST endpoints, sync event types, WebSocket events |
-| `ARCHITECTURE.md` | ✅ Done — v1.1 | This document |
-| `HARDWARE-INTEGRATION.md` | 🔲 Not written | Scanner, printer protocols and Flutter integration. §4 of this document is the only current source and is a summary. |
-| `UI-GUIDELINES.md` | 🔲 Not written | Design rules for non-technical users |
-| `CODING-STANDARDS.md` | 🔲 Not written | Repo layout, layering, naming, testing. Must conform to `API-SPEC.md` §1.4 and `DATA-MODEL.md` §1.2 when authored. |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.4, 2 open decisions in its §11 | Sync design, failover, conflict resolution, rejection reconciliation |
+| `DATA-MODEL.md` | ✅ Done — v1.4, 3 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
+| `API-SPEC.md` | ✅ Done — v1.4 | All REST endpoints, sync event types, WebSocket events |
+| `ARCHITECTURE.md` | ✅ Done — v1.2 | This document |
+| `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration. Supersedes §4 of this document, which is a summary. Label printer confirmed post-launch by its §6. |
+| `UI-GUIDELINES.md` | 🟡 Written at v1.0 — 3 gaps | Design rules for non-technical users. Its §5.5 void copy and the missing rejection-notice pattern are recorded in `SYNC-PROTOCOL.md` §11.2. |
+| `CODING-STANDARDS.md` | 🟡 Written at v1.1 — 3 conformance fixes needed | Repo layout, layering, naming, testing. Its §5.8 must conform to `API-SPEC.md` §1.4, §4.4 to `DATA-MODEL.md` §1.2, and §4.3 to `SYNC-PROTOCOL.md` §2.5. |
 | `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
 | `DEPLOYMENT.md` | 🔲 Not written | §9 of this document is the only current source and is a summary. |
 | `SECURITY.md` | 🔲 Not written | §11 of this document is the only current source and is a summary. |
+
+**What 🟡 means in this table (added 1.2).** `CODING-STANDARDS.md` (v1.1) and `UI-GUIDELINES.md` (v1.0) are written in full at those versions, but reconciliation against them is still outstanding — the conformance fixes and gaps named in their rows above are open, and the §5 and §6 directory trees in this document have already been changed to match `CODING-STANDARDS.md` §4.1 and §5.1. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.

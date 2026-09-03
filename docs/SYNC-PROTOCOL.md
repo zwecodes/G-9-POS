@@ -1,9 +1,11 @@
 # G9POS Sync Protocol
 
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Draft
 **Last updated:** 2026-09-03
 **Author:** Architecture Team
+
+**Changelog since 1.3:** Reconciled against `CODING-STANDARDS.md` v1.1 and `UI-GUIDELINES.md` v1.0, whose contents became readable for the first time this pass. (1) §2.5 now names the specific non-conforming example: `CODING-STANDARDS.md` §4.3 sets `referenceId: product.id.value` on a standalone `PRODUCT_*` event, which is the exact anti-pattern §2.5 forbids, in the snippet that section presents as the pattern to copy. (2) §11.1 records that Option A (local hard delete) also violates `CODING-STANDARDS.md` §1 rule 2 — "Never hard-delete", listed as non-negotiable — so both options now require amending an absolute rule, which sharpens rather than settles the decision. (3) Added §11.2: `UI-GUIDELINES.md` §5.5's void confirmation promises "Stock will be returned automatically. This cannot be undone," and both halves are false exactly when §4.4 fires. No rule in this document changed.
 
 **Changelog since 1.2:** Audited the §4.4 rejection-reconciliation rule that 1.2 introduced, and split it into the parts that follow from pre-existing rules and the one part that does not. Four steps — queue drop, in-place revert of mutable rows, owner notice, and no compensating event — are shown in §4.4 to be inherited from §1, §2.3, §4.1, §4.2 and `API-SPEC.md` §6, and remain policy. The fifth, undoing an unsynced row in the append-only `inventory_events` log, contradicted `DATA-MODEL.md` §1.2 ("no update path and no delete path") and is now carried as an explicit open decision in the new §11.1 instead of being stated as settled. §4.4's revert table, Scenario G and §10 are marked accordingly: only `CATEGORY_HAS_PRODUCTS` is fully executable today.
 
@@ -125,6 +127,8 @@ This is worth stating as an explicit rule because setting it to the entity's own
 2. **Unrelated writes silently merged.** Two independent edits to the *same* product would share a `reference_id` and therefore become one atomic group — so an old, queued edit could be reverted or retried together with a new, unrelated one. That is a correctness bug, not just noise.
 
 Concretely: a `PRODUCT_UPDATED` for product `P` has `reference_id = NULL`. An `INVENTORY_SOLD` for product `P` arising from sale `S` has `reference_id = S` — the sale that caused it, never `P`, and never the event's own `id`.
+
+**Confirmed conflict with `CODING-STANDARDS.md` §4.3 (v1.1).** The `ProductRepository.saveProduct` example there enqueues a `PRODUCT_CREATED`/`PRODUCT_UPDATED` with `referenceId: product.id.value` — consequence 2 above, verbatim, in the snippet that section presents as the pattern every feature must copy. Two independent offline edits to the same product would share a `reference_id` and be merged into one atomic group, so an old queued edit could be reverted or retried together with an unrelated new one. That call must pass `referenceId: null`. This document owns sync semantics, so the example is what changes here, not the rule.
 
 ---
 
@@ -543,7 +547,7 @@ Response: all server-side changes since `last_sync_at` that this device hasn't o
 
 ---
 
-## 11. Open Decisions (added in 1.3)
+## 11. Open Decisions (§11.1 added in 1.3, §11.2 in 1.4)
 
 ### 11.1 How does a device undo an unsynced `inventory_events` row?
 
@@ -557,9 +561,25 @@ Two mechanisms are available and the documentation does not favour either:
 
 | Option | Mechanism | Cost |
 |---|---|---|
-| **A — narrow the append-only rule** | Hard-delete the rejected rows locally, and restate `DATA-MODEL.md` §1.2 as governing rows the server has *accepted*, with unsynced rejected rows an explicit carve-out. | Weakens the strongest invariant in the data model. Requires care that the carve-out cannot be reached for any row with `synced_at` set, or the event log becomes editable in practice. |
+| **A — narrow the append-only rule** | Hard-delete the rejected rows locally, and restate `DATA-MODEL.md` §1.2 as governing rows the server has *accepted*, with unsynced rejected rows an explicit carve-out. | Weakens the strongest invariant in the data model. Requires care that the carve-out cannot be reached for any row with `synced_at` set, or the event log becomes editable in practice. **Also collides with a second rule — see below.** |
 | **B — mark and exclude** | Add a local-only column to `inventory_events` (SQLite only) and exclude marked rows from the §3.4 sum. | Adds a soft-delete-shaped column to the table `DATA-MODEL.md` §1.2 specifically says must not have one, and makes the SQLite and PostgreSQL definitions of the log diverge (§4). |
+
+**Option A additionally violates a rule listed as non-negotiable.** `CODING-STANDARDS.md` §1 rule 2 reads: *"Never hard-delete. Every delete is a soft delete via `deleted_at`. The sync protocol depends on this."* — under a heading stating that violation means PR rejection with no exceptions. So Option A cannot be chosen silently; it needs an explicit, written exemption in that document, narrowed to unsynced rows of a permanently rejected group. Option B avoids that collision but runs into `DATA-MODEL.md` §1.2 instead, which forbids exactly the column it needs. **Both options require amending a rule that is currently absolute, which is the substance of this decision and the reason it cannot be settled by reading the documents.**
 
 **Who decides:** architecture owner, before the sync flusher's rejection handler is implemented. Whichever is chosen, `DATA-MODEL.md` §1.2 and §3.5 must be updated in the same change — the current text is incompatible with both options as written.
 
 **Note on scope:** this is *only* about unsynced rows from a permanently rejected group. It is not a request to make the event log editable, and it does not touch §4.1: accepted events remain immutable and corrections to them are still appended, never reverted.
+
+### 11.2 The void confirmation promises something §4.4 can break
+
+`UI-GUIDELINES.md` §5.5 (v1.0) specifies this confirmation body for the void action: *"Stock will be returned automatically. **This cannot be undone.**"*
+
+Both sentences are false in the case §4.4 exists to handle. When the server rejects the void with `VOID_WINDOW_CLOSED`, stock is *not* returned, and the void *is* undone — by the device itself, some hours later, with the owner having already been told the opposite. For a non-technical operator this is the worst available outcome: the app stated a guarantee and then silently reversed it.
+
+Three related gaps, all in documents this one does not own:
+
+1. **The wording is wrong.** It must not promise finality for an action the server may refuse. Replacement wording is `UI-GUIDELINES.md`'s call, not this document's.
+2. **The rejection notice has no home.** §4.4 requires the owner be told, and `UI-GUIDELINES.md` has no pattern for it — §8 covers immediate errors and empty states, not a deferred reversal. One constraint *is* already fixed: §6 says the sync indicator is "never a popup or modal", and a rejection surfaces minutes to days after the action, so a modal is ruled out on the existing rules. The sync status screen that §6 opens on tap is the only surface currently specified that could carry it.
+3. **The `CANCELLED` badge must be revocable.** `UI-GUIDELINES.md` §5.8 shows voided sales with a `CANCELLED` badge; on revert that badge has to disappear, and no rule covers a badge that un-sets itself.
+
+**Who decides:** product owner with `UI-GUIDELINES.md`, alongside §9.1 of `DATA-MODEL.md` — if `server_received_at` is mirrored to SQLite, the void action can be greyed out once the shop-day passes and this whole class of rejection becomes largely unreachable, which would shrink gaps 1 and 3 to edge cases. The two decisions should be taken together.
