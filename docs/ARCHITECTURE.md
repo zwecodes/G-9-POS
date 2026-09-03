@@ -1,9 +1,11 @@
 # G9POS System Architecture
 
-**Version:** 1.3  
+**Version:** 1.4  
 **Status:** Draft  
 **Last updated:** 2026-09-04  
 **Author:** Architecture Team
+
+**Changelog since 1.3:** Status-only. §13 records G1 and `SYNC-PROTOCOL.md` §11.2 as resolved, and updates document versions to match the tree: `SYNC-PROTOCOL.md` v1.6, `DATA-MODEL.md` v1.6, `API-SPEC.md` v1.5, `UI-GUIDELINES.md` v1.1, `CODING-STANDARDS.md` v1.3. The three void-copy gaps previously listed against `UI-GUIDELINES.md` are closed by §11.2. No layering or request-flow change.
 
 **Changelog since 1.2:** No architectural changes. Records the G1 resolution in the §8 summary: reverting a locally-written row in the append-only inventory log, previously an open decision, is settled — the device sets a local-only `rejected_at` marker on the rejected event's or group's rows and excludes marked rows from its own stock sum (`SYNC-PROTOCOL.md` §11.1, `DATA-MODEL.md` §3.5). Nothing is hard-deleted, the marker never leaves the device, and server-accepted events remain immutable, so §6's request flow and the layering in §5 and §6 are unaffected. Updated the §13 status rows for the three documents whose versions moved with that change.
 
@@ -406,15 +408,15 @@ Filenames below are the actual on-disk names. Earlier versions of this table use
 
 | Document | Status | Purpose |
 |----------|--------|---------|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.5, 1 open decision in its §11 (§11.2) | Sync design, failover, conflict resolution, rejection reconciliation |
-| `DATA-MODEL.md` | ✅ Done — v1.5, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
-| `API-SPEC.md` | ✅ Done — v1.4 | All REST endpoints, sync event types, WebSocket events |
-| `ARCHITECTURE.md` | ✅ Done — v1.3 | This document |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.6, §11 settled (G1 / §11.1 and honest optimistic void / §11.2) | Sync design, failover, conflict resolution, rejection reconciliation |
+| `DATA-MODEL.md` | ✅ Done — v1.6, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
+| `API-SPEC.md` | ✅ Done — v1.5 | All REST endpoints, sync event types, WebSocket events |
+| `ARCHITECTURE.md` | ✅ Done — v1.4 | This document |
 | `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration. Supersedes §4 of this document, which is a summary. Label printer confirmed post-launch by its §6. |
-| `UI-GUIDELINES.md` | 🟡 Written at v1.0 — 3 gaps | Design rules for non-technical users. Its §5.5 void copy and the missing rejection-notice pattern are recorded in `SYNC-PROTOCOL.md` §11.2. |
-| `CODING-STANDARDS.md` | 🟡 Written at v1.2 — 3 conformance fixes needed | Repo layout, layering, naming, testing. Its §5.8 must conform to `API-SPEC.md` §1.4, §4.4 to `DATA-MODEL.md` §1.2, and §4.3 to `SYNC-PROTOCOL.md` §2.5. |
+| `UI-GUIDELINES.md` | ✅ Complete — v1.1 | Design rules for non-technical users. Void copy, `CANCELLED` derivation, and the deferred-rejection notice are specified in its §5.5, §5.8 and §6 (`SYNC-PROTOCOL.md` §11.2). |
+| `CODING-STANDARDS.md` | 🟡 Written at v1.3 — 2 conformance fixes needed | Repo layout, layering, naming, testing. Its §5.8 must conform to `API-SPEC.md` §1.4, and §4.3 to `SYNC-PROTOCOL.md` §2.5. |
 | `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
 | `DEPLOYMENT.md` | 🔲 Not written | §9 of this document is the only current source and is a summary. |
 | `SECURITY.md` | 🔲 Not written | §11 of this document is the only current source and is a summary. |
 
-**What 🟡 means in this table (added 1.2).** `CODING-STANDARDS.md` (v1.2) and `UI-GUIDELINES.md` (v1.0) are written in full at those versions, but reconciliation against them is still outstanding — the conformance fixes and gaps named in their rows above are open, and the §5 and §6 directory trees in this document have already been changed to match `CODING-STANDARDS.md` §4.1 and §5.1. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.
+**What 🟡 means in this table (added 1.2).** `CODING-STANDARDS.md` (v1.3) is written in full, but two conformance items named in its row above remain open. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.
