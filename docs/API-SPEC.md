@@ -1,9 +1,11 @@
 # G9POS API Specification
 
-**Version:** 1.4
+**Version:** 1.5
 **Status:** Resolved — no open questions
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.4:** No contract changes. Status-only: §6.1 no longer describes G1 (`SYNC-PROTOCOL.md` §11.1) or honest optimistic void (`SYNC-PROTOCOL.md` §11.2) as open. §16 document versions updated to the current tree. Endpoints, envelopes, `rejected[]`, reason codes, and status codes are unchanged.
 
 **Changelog since 1.3:** No contract changes. §1.4's conformance note, written in 1.3 against an unreadable `CODING-STANDARDS.md`, is now stated against its actual v1.1 text: §5.8's `APIResponse{Success, Data, Error string}` struct is the flat `{success, data, error}` form §1.4 rules out, and diverges on four counts (spurious `success` flag, `error` as a string rather than an object, no `error.code`, no `meta`). The note now also flags that the `response.*` helpers built on that struct and the §5.3/§5.4 handler examples calling them are affected, and that a flat string `error` has nowhere to carry `retry_after` (§2.1) or `blocking_product_count` (§5). §1.4 itself is unchanged and remains binding.
 
@@ -62,7 +64,7 @@ Error:
 
 Any lower-authority document, helper struct, or scaffolding example that describes a different envelope — for example a flat `{ success, data, error }` object — is wrong and must be corrected to match this section rather than the reverse. Per the project's documentation hierarchy, a summary or standards document does not get to redefine a contract owned by this specification.
 
-**Confirmed conflict with `CODING-STANDARDS.md` §5.8 (v1.1).** That section's `APIResponse` struct is exactly the flat form ruled out above, and it does not conform on four counts:
+**Confirmed conflict with `CODING-STANDARDS.md` §5.8 (still present in v1.3).** That section's `APIResponse` struct is exactly the flat form ruled out above, and it does not conform on four counts:
 
 | `CODING-STANDARDS.md` §5.8 | This section requires |
 |---|---|
@@ -231,7 +233,7 @@ This closes the "sale exists but stock hasn't moved" window completely, rather t
 
 **New in 1.3.** Versions 1.1 and 1.2 introduced business rules that the server enforces and the device cannot evaluate offline (`CATEGORY_DELETED` blocked by products; `SALE_VOIDED` outside the shop-day; owner-only events submitted under a staff PIN, §1.6). What was missing was the other half of the contract: how the device *learns* the event was refused, and how it distinguishes "refused forever" from "try again later". Without that distinction, a device that had already applied the change locally would either retry forever or drop it silently and stay permanently diverged from the server.
 
-This section defines the **server side** of that contract. The device-side reconciliation — what it reverts and how it tells the owner — is specified in `SYNC-PROTOCOL.md` §4.4 and is not repeated here. Note that the device side is not fully settled: reverting a local write to the append-only `inventory_events` log is an open decision (`SYNC-PROTOCOL.md` §11.1), which affects three of the four reason codes below. Nothing in *this* section depends on how that is resolved — the server's behaviour and the wire format are unaffected either way.
+This section defines the **server side** of that contract. The device-side reconciliation — what it reverts and how it tells the owner — is specified in `SYNC-PROTOCOL.md` §4.4 and is not repeated here. Reverting a local write to the append-only `inventory_events` log is settled (`SYNC-PROTOCOL.md` §11.1). How a rejected void is presented to the owner is settled (`SYNC-PROTOCOL.md` §11.2). Nothing in *this* section depends on those device-side details — the server's behaviour and the wire format are unaffected.
 
 #### Transient vs permanent
 
@@ -271,7 +273,7 @@ Permanently rejected events are returned in a `rejected[]` array, alongside the 
 | `ROLE_NOT_PERMITTED` | Any owner-only event under a `staff` PIN (§1.6), or any mutating event under a `dashboard_viewer` token (§1.8) | `{ }` | The submitter's role will not change by resending. |
 | `EVENT_VALIDATION_FAILED` | `INVENTORY_ADJUSTED` / `INVENTORY_DAMAGED` missing the required `note` (§5) | `{ "field": "note" }` | The payload is already in the queue as written; resending sends the same invalid payload. |
 
-This list is closed: **a server may only reject an event permanently for a reason listed here.** Any new permanent-rejection rule must add its code to this table in the same change that implements it, so the device always has a defined revert path (`SYNC-PROTOCOL.md` §4.4 — subject to §11.1 for reasons that touch inventory). Anything else that goes wrong is transient by definition and must be retried, not rejected.
+This list is closed: **a server may only reject an event permanently for a reason listed here.** Any new permanent-rejection rule must add its code to this table in the same change that implements it, so the device always has a defined revert path (`SYNC-PROTOCOL.md` §4.4). Anything else that goes wrong is transient by definition and must be retried, not rejected.
 
 ---
 
@@ -422,13 +424,13 @@ All 7 items originally listed here (dashboard identity, login lockout, staff PIN
 
 | Document | Status | Purpose |
 |---|---|---|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.4, 2 open decisions in its §11 | Sync design, failover, conflict resolution, rejection reconciliation (§4.4) |
-| `DATA-MODEL.md` | ✅ Done — v1.4, 3 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
-| `ARCHITECTURE.md` | ✅ Done — v1.2 | System architecture |
-| `API-SPEC.md` | ✅ Done — v1.4, 0 open questions | This document |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.6, §11 settled | Sync design, failover, conflict resolution, rejection reconciliation (§4.4) |
+| `DATA-MODEL.md` | ✅ Done — v1.6, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
+| `ARCHITECTURE.md` | ✅ Done — v1.4 | System architecture |
+| `API-SPEC.md` | ✅ Done — v1.5, 0 open questions | This document |
 | `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration |
-| `UI-GUIDELINES.md` | 🟡 Written at v1.0 — 3 gaps | Design rules for non-technical users. See `SYNC-PROTOCOL.md` §11.2. |
-| `CODING-STANDARDS.md` | 🟡 Written at v1.1 — **§5.8 does not conform to §1.4** | Repo layout, layering, naming, testing. See the conformance table in §1.4. |
+| `UI-GUIDELINES.md` | ✅ Complete — v1.1 | Design rules for non-technical users. Void copy and deferred-rejection notice: `SYNC-PROTOCOL.md` §11.2. |
+| `CODING-STANDARDS.md` | 🟡 Written at v1.3 — **§5.8 does not conform to §1.4**; §4.3 vs `SYNC-PROTOCOL.md` §2.5 also outstanding | Repo layout, layering, naming, testing. See the conformance table in §1.4. |
 | `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
 
-**What 🟡 means in this table.** `CODING-STANDARDS.md` (v1.1) and `UI-GUIDELINES.md` (v1.0) are written in full at those versions, but reconciliation against them is still outstanding — where a row above names conformance fixes or gaps, those items are open, and for `CODING-STANDARDS.md` the §1.4 conformance table is that list. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.
+**What 🟡 means in this table.** `CODING-STANDARDS.md` (v1.3) is written in full, but two conformance items remain open: §5.8 vs §1.4 of this document, and §4.3 vs `SYNC-PROTOCOL.md` §2.5. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.
