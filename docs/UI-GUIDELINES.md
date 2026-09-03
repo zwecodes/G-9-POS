@@ -1,9 +1,11 @@
 # UI-GUIDELINES.md
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Complete  
-**Last updated:** 2026-09-01  
+**Last updated:** 2026-09-04  
 **Author:** Architecture Team
+
+**Changelog since 1.0:** Records the honest-optimistic-void decision (`SYNC-PROTOCOL.md` §11.2). §5.5 no longer promises that stock will definitely be returned or that a void cannot be undone. Confirmation before voiding is unchanged. `CANCELLED` is the history rendering of `sales.status = voided` and is absent after a rejected void restores `completed`. §6 adds the deferred-rejection notice on the existing sync status screen — never a popup or modal, never blocking a sale. No pending badge and no new UI state.
 
 ---
 
@@ -260,11 +262,13 @@ This screen is open all day. It must feel instant and never require scrolling to
 
 - Access: Sales History → tap sale → Void button (not prominently placed — owner must mean to find it)
 - Void button: red, clearly labeled "Cancel This Sale"
-- Confirmation dialog before voiding — plain language:
+- Confirmation dialog before voiding — plain language (required; see also §13):
   - Title: "Cancel this sale?"
-  - Body: "Stock will be returned automatically. This cannot be undone."
+  - Body: "If the shop still allows cancelling this sale today, stock will be put back. If not, the sale will stay completed."
   - Buttons: "Yes, Cancel Sale" (red) / "Keep It" (grey)
-- After void: brief confirmation, sale shows "CANCELLED" badge in history
+- Do **not** say stock will definitely be returned. Do **not** say "This cannot be undone." The server can refuse a void after the shop-day (`SYNC-PROTOCOL.md` §4.4, `VOID_WINDOW_CLOSED`).
+- After confirm: brief confirmation. The sale shows a "CANCELLED" badge in history while `sales.status = voided`.
+- If the server later rejects the void, `status` is restored to `completed` (`SYNC-PROTOCOL.md` §4.4). The `CANCELLED` badge is then absent — it is not a stored field, only the rendering of `status = voided`. The owner is told on the sync status screen (§6), not by a popup.
 
 ### 5.6 Product Add/Edit Screen
 
@@ -288,7 +292,7 @@ This screen is open all day. It must feel instant and never require scrolling to
 
 - List, newest first
 - Each row: sale number, time, item count, total amount, staff name
-- Voided sales shown with "CANCELLED" badge — not hidden
+- Voided sales shown with "CANCELLED" badge — not hidden. The badge is shown when `sales.status = voided`. It is not shown when a rejected optimistic void has restored `status = completed` (`SYNC-PROTOCOL.md` §4.4 / §11.2). No pending badge and no extra status.
 - Tap any sale: full detail with line items and "Reprint Receipt" button
 - Filter: by date (default today), by staff (if multiple users)
 
@@ -344,6 +348,13 @@ Shown in the app header on every screen — subtle, never blocking.
 - Tapping the icon always opens the sync status screen (shows pending count, last sync time, sync now button)
 - Never block a sale regardless of sync status
 - Icon is always in the top-right of the header, consistent across all screens
+
+**Deferred rejection notices (added in 1.1).** When the server permanently refuses a change the device already applied — a void rejected with `VOID_WINDOW_CLOSED` is the case this exists for (`SYNC-PROTOCOL.md` §4.4 / §11.2) — the owner is told here, on this screen, not by a popup or modal and not during a sale.
+
+- One sentence, plain language, names the affected record. Example: "Sale S-00142 could not be cancelled. The shop day had ended."
+- Listed on the sync status screen with the existing pending count and last-sync information.
+- Never a popup or modal (same rule as the header icon above).
+- Never interrupts or blocks an active sale.
 
 ---
 

@@ -1,9 +1,11 @@
 # G9POS Sync Protocol
 
-**Version:** 1.5
+**Version:** 1.6
 **Status:** Draft
 **Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.5:** §11.2 is resolved as honest optimistic void. Optimistic local void remains; `VOID_WINDOW_CLOSED` still uses the §4.4 / G1 rollback already specified. `CANCELLED` is the history rendering of `sales.status = voided` and disappears when revert restores `completed`. The required owner notice lives on the existing sync status screen — plain language, names the sale, never a popup or modal, never in the sale path. Mirroring `sales.server_received_at` into SQLite is **not** required to close this and remains `DATA-MODEL.md` §9.1. G1 / `rejected_at` is unchanged.
 
 **Changelog since 1.4:** §11.1 is resolved, which completes §4.4. A device undoes an unsynced `inventory_events` row from a permanently rejected event or group by setting a local-only `rejected_at` marker on it (`DATA-MODEL.md` §3.5) and excluding marked rows from its own stock sum — Option B of the two the previous version recorded. Grouped rows are identified by `reference_id`; standalone inventory events (`INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, `INVENTORY_RETURNED`) by event `id`. Nothing is hard-deleted, so `CODING-STANDARDS.md` §1 rule 2 needs no exemption; the marker is reachable only while `synced_at IS NULL`, so accepted events remain as immutable as §4.1 requires; and the server schema and the wire contract in `API-SPEC.md` are untouched. Consequently all four `reason` codes in §4.4's revert table are now executable, the fifth row of its derivation table moves from open to settled, §3.4 documents the device-side filter, and Scenario G closes end-to-end. §11.2 remains open and is unaffected.
 
@@ -277,7 +279,7 @@ After the revert, the device recomputes its cached `computed_stock` for the affe
 
 - **Never in the sale path.** Reconciliation runs in the background flusher, exactly like any other sync response handling. It must never block, delay, or interrupt a sale (§1, core rule 1) — a rejection from this morning's void is handled while the owner may be mid-sale, and must stay invisible until they look.
 - **Idempotent.** A revert applied twice is harmless: the second application finds the rows already at the confirmed state and changes nothing. This matters because the device may receive the same `rejected[]` entry again if it retries a batch whose response it never fully processed.
-- **The owner is always told.** A silent revert is worse than the divergence — the owner would believe a sale was cancelled or a category deleted when it was not. Presentation (banner, list, badge) is a `UI-GUIDELINES.md` concern and is not specified here; this document only requires that the notice happen and that it name the affected record in plain language.
+- **The owner is always told.** A silent revert is worse than the divergence — the owner would believe a sale was cancelled or a category deleted when it was not. Presentation is a `UI-GUIDELINES.md` concern. For a rejected void specifically, the notice lives on the sync status screen already specified there (§6): plain language, names the sale, never a popup or modal, never in the sale path — see §11.2. This document still only requires that the notice happen and that it name the affected record.
 
 ---
 
@@ -436,7 +438,7 @@ flutter_secure_storage keys:
 4. Wednesday, connectivity returns and the flusher sends the group.
 5. The server evaluates `SALE_VOIDED` against `sales.server_received_at` in `SHOP_TIMEZONE`: the sale was received Monday, so the void window closed. It rejects the **whole group** in one transaction — the sale stays `completed` and no `INVENTORY_VOIDED` rows are written server-side. The response returns the group in `rejected[]` with `reason: VOID_WINDOW_CLOSED` (§9).
 6. The device removes the group from the queue — retrying would fail identically forever — and reverts per §4.4: `status` back to `completed` and the void columns cleared.
-7. The owner sees a plain-language notice that the sale could not be cancelled.
+7. The owner sees a plain-language notice on the **sync status screen** that the sale could not be cancelled (§11.2). Not a popup, not a modal, and not during a sale.
 8. **The tablet now agrees with the server again (settled in 1.5).** In the same local transaction as step 6, the device sets `rejected_at` on each of the locally-written `INVENTORY_VOIDED` rows and recomputes the affected products' `computed_stock`, which excludes marked rows (§3.4, §11.1). The rows stay in the log for the audit trail, but they stop counting — so the stock that appeared to come back goes down again, matching the server and every other device.
 
 Without §4.4, step 6 would have dropped the queue item and left the tablet permanently showing a voided sale *and* inflated stock that no other device and no report would ever agree with. §4.4 fixes the sale row and, since 1.5, §11.1 fixes the stock — the scenario now closes end-to-end.
@@ -559,12 +561,13 @@ Response: all server-side changes since `last_sync_at` that this device hasn't o
 | `reference_id` on standalone events | Always NULL. It is a causal-group key only, never the entity's own `id` — see §2.5 (added in 1.2) |
 | Device activation mechanism | `DEVICE_ACTIVATED` queue event only. No REST endpoint — failover must work with no internet (§5.3) (added in 1.2) |
 | Secure-storage key prefix | `g9pos_*`. No migration required — no shipped build exists (§6.4) (added in 1.2) |
+| Honest optimistic void | Optimistic local void remains. `VOID_WINDOW_CLOSED` still reverts per §4.4 / G1. `CANCELLED` is derived from `sales.status = voided` and is absent after revert restores `completed`. Deferred owner notice lives on the sync status screen — never a modal, never in the sale path. Mirroring `server_received_at` is not required and remains `DATA-MODEL.md` §9.1. See §11.2 (closed in 1.6) |
 
 ---
 
-## 11. Decision Records (§11.1 added in 1.3 and resolved in 1.5, §11.2 added in 1.4 and open)
+## 11. Decision Records (§11.1 added in 1.3 and resolved in 1.5, §11.2 added in 1.4 and resolved in 1.6)
 
-§11.1 is settled. It is kept here rather than folded into §10 because §3.4, §4.4 and `DATA-MODEL.md` §1.2 all rest on its reasoning, and because the option it rejected is the one a future reader is most likely to reach for. §11.2 is still open.
+§11.1 and §11.2 are both settled. They are kept here rather than folded into §10 because later sections rest on their reasoning, and because the options they rejected are the ones a future reader is most likely to reach for.
 
 ### 11.1 How a device undoes an unsynced `inventory_events` row (resolved in 1.5)
 
@@ -596,7 +599,7 @@ Option A was to hard-delete the rejected rows and restate `DATA-MODEL.md` §1.2 
 
 1. **It needs an exemption to a non-negotiable rule; this does not.** `CODING-STANDARDS.md` §1 rule 2 reads *"Never hard-delete. Every delete is a soft delete via `deleted_at`. The sync protocol depends on this."*, under a heading stating that violation means PR rejection with no exceptions. Option A cannot be adopted without writing an exemption into that rule. Marking deletes nothing, so rule 2 stands untouched.
 2. **The invariant that matters is preserved rather than weakened.** §1.2's stated reason for banning `deleted_at` is that it "would make stock silently mutable and defeat the event log" — a statement about *accepted* history. A marker that cannot be set while `synced_at` is set leaves accepted history exactly as immutable as before. Option A instead makes the log genuinely deletable and relies on its carve-out staying airtight forever.
-3. **It keeps the evidence.** §4.4 requires the owner be told which movement did not stick, and §11.2 may yet need a surface that shows it. A hard delete destroys precisely that record.
+3. **It keeps the evidence.** §4.4 requires the owner be told which movement did not stick, and §11.2 places that notice on the sync status screen. A hard delete destroys precisely that record.
 4. **Its failure mode is recoverable.** A wrongly-set marker understates stock and is fixed by clearing it. A wrongly-scoped hard delete removes accepted history irreversibly.
 
 The cost 1.3 attributed to this option — that it makes the SQLite and PostgreSQL definitions of the log diverge — turned out to overstate the novelty. `inventory_events` **already** diverges: `synced_at` is SQLite-only and `server_received_at` is PostgreSQL-only, both documented as expected in `DATA-MODEL.md` §4. One more nullable SQLite-only column follows the established pattern for this table rather than introducing a new class of problem.
@@ -607,16 +610,17 @@ The cost 1.3 attributed to this option — that it makes the SQLite and PostgreS
 
 **Note on scope:** this covers *only* unsynced rows from a permanently rejected event or group. It does not make the event log editable, and it does not touch §4.1 — accepted events remain immutable and corrections to them are still appended, never reverted.
 
-### 11.2 The void confirmation promises something §4.4 can break
+### 11.2 Honest optimistic void (resolved in 1.6)
 
-`UI-GUIDELINES.md` §5.5 (v1.0) specifies this confirmation body for the void action: *"Stock will be returned automatically. **This cannot be undone.**"*
+**Resolution: keep optimistic local void; tell the truth in the UI; put the deferred notice on the existing sync status screen.** `VOID_WINDOW_CLOSED` continues to use the already-resolved §4.4 / G1 rollback. No new schema, no pending badge, no local shop-day. Presentation lives in `UI-GUIDELINES.md` (v1.1) §5.5, §5.8 and §6.
 
-Both sentences are false in the case §4.4 exists to handle. When the server rejects the void with `VOID_WINDOW_CLOSED`, stock is *not* returned, and the void *is* undone — by the device itself, some hours later, with the owner having already been told the opposite. For a non-technical operator this is the worst available outcome: the app stated a guarantee and then silently reversed it.
+**What was already settled** and is unchanged by this: the write path, the server window, and the revert. A void is applied to SQLite immediately (§1, core rule 2). The server is the sole enforcer of the same-shop-day rule (`API-SPEC.md` §5, `DATA-MODEL.md` §3.6). On `VOID_WINDOW_CLOSED` the device still: drops the group from the queue, restores `sales.status = completed` and clears the three void columns, sets `rejected_at` on the unsynced `INVENTORY_VOIDED` rows, recomputes stock, and emits no compensating event (§4.4, §11.1, Scenario G). G1 / `rejected_at` is not reopened.
 
-Three related gaps, all in documents this one does not own:
+**What this decides.**
 
-1. **The wording is wrong.** It must not promise finality for an action the server may refuse. Replacement wording is `UI-GUIDELINES.md`'s call, not this document's.
-2. **The rejection notice has no home.** §4.4 requires the owner be told, and `UI-GUIDELINES.md` has no pattern for it — §8 covers immediate errors and empty states, not a deferred reversal. One constraint *is* already fixed: §6 says the sync indicator is "never a popup or modal", and a rejection surfaces minutes to days after the action, so a modal is ruled out on the existing rules. The sync status screen that §6 opens on tap is the only surface currently specified that could carry it.
-3. **The `CANCELLED` badge must be revocable.** `UI-GUIDELINES.md` §5.8 shows voided sales with a `CANCELLED` badge; on revert that badge has to disappear, and no rule covers a badge that un-sets itself.
+1. **Optimistic local void remains.** The owner can still cancel a sale with no internet. The device still cannot evaluate the shop-day window locally (`DATA-MODEL.md` §3.6, §4), so it still submits and lets the server refuse.
+2. **`CANCELLED` is not a stored field.** It is the sales-history rendering of `sales.status = voided` (`UI-GUIDELINES.md` §5.8). After §4.4 restores `status = completed`, the badge is absent because the sale is no longer voided. No extra column, no pending badge, no new UI state.
+3. **The owner notice for a rejected void is required, and it has a home.** Plain language, names the affected sale, lives on the **sync status screen** already opened by the header sync icon (`UI-GUIDELINES.md` §6). Never a popup or modal — §6 already forbids that, and a rejection can arrive minutes to days later, often while the owner is mid-sale. Never in the sale path (§4.4). Example tone, owned by `UI-GUIDELINES.md`: *"Sale S-00142 could not be cancelled. The shop day had ended."*
+4. **Mirroring `sales.server_received_at` into SQLite is not required to close this.** That remains `DATA-MODEL.md` §9.1. Gating the void action after the shop-day would shrink how often `VOID_WINDOW_CLOSED` fires; it would not replace §4.4, and it would add a pull-payload field plus a local shop-day computation that `DATA-MODEL.md` §4 currently forbids. Correctness does not depend on it.
 
-**Who decides:** product owner with `UI-GUIDELINES.md`, alongside §9.1 of `DATA-MODEL.md` — if `server_received_at` is mirrored to SQLite, the void action can be greyed out once the shop-day passes and this whole class of rejection becomes largely unreachable, which would shrink gaps 1 and 3 to edge cases. The two decisions should be taken together.
+**What this does not change.** G1, `rejected_at`, the wire contract in `API-SPEC.md`, the §4.4 revert table, or the device's inability to pre-compute the void window.
