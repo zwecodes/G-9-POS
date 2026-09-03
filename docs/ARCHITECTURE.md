@@ -1,9 +1,11 @@
 # G9POS System Architecture
 
-**Version:** 1.2  
+**Version:** 1.3  
 **Status:** Draft  
-**Last updated:** 2026-09-03  
+**Last updated:** 2026-09-04  
 **Author:** Architecture Team
+
+**Changelog since 1.2:** No architectural changes. Records the G1 resolution in the §8 summary: reverting a locally-written row in the append-only inventory log, previously an open decision, is settled — the device sets a local-only `rejected_at` marker on the rejected event's or group's rows and excludes marked rows from its own stock sum (`SYNC-PROTOCOL.md` §11.1, `DATA-MODEL.md` §3.5). Nothing is hard-deleted, the marker never leaves the device, and server-accepted events remain immutable, so §6's request flow and the layering in §5 and §6 are unaffected. Updated the §13 status rows for the three documents whose versions moved with that change.
 
 **Changelog since 1.1:** Reconciled §5 and §6 against `CODING-STANDARDS.md` v1.1, readable for the first time this pass (O6). (1) §5 moves `theme/` and `utils/` from `shared/` to `core/` and adds `shared/providers/` and `shared/router/`, matching §4.1 of that document. (2) §6 removes the stray `pkg/websocket/` — the hub is `internal/dashboard/websocket_hub.go`, and listing it in both places was internally contradictory — and adds the missing `pkg/timezone/` and `pkg/response/`. Both trees are summaries; `CODING-STANDARDS.md` owns code layout. The `categories` additions made in 1.1 are confirmed correct against §4.1 and §5.1, which added the same packages independently.
 
@@ -301,7 +303,7 @@ Staff log in with a 4-digit PIN on the device after the owner has authenticated 
 | Offline operation | Full functionality from local SQLite indefinitely |
 | Conflict on stock | Applied as-is, negative stock flagged, owner alerted |
 | Conflict on LWW | Later timestamp wins, server notifies losing device |
-| Permanent rejection | Server returns the event in `rejected[]`; device reverts its local optimistic write and tells the owner — never retried, no compensating event (`API-SPEC.md` §6.1, `SYNC-PROTOCOL.md` §4.4). Reverting rows in the append-only inventory log is an open decision (`SYNC-PROTOCOL.md` §11.1) |
+| Permanent rejection | Server returns the event in `rejected[]`; device reverts its local optimistic write and tells the owner — never retried, no compensating event (`API-SPEC.md` §6.1, `SYNC-PROTOCOL.md` §4.4). Reverting rows in the append-only inventory log is **resolved**: the device sets a local-only `rejected_at` marker and excludes marked rows from its own stock sum — no hard delete, nothing replicated, accepted rows still immutable (`SYNC-PROTOCOL.md` §11.1, `DATA-MODEL.md` §3.5) |
 | Clock skew | Server uses `server_received_at` as tiebreaker if delta < 5s |
 | Idempotency | Every event has a UUID — server ignores duplicates |
 | Failover | Phone pre-authenticated, background synced, one-tap activation via the `DEVICE_ACTIVATED` queue event — no connectivity required |
@@ -404,15 +406,15 @@ Filenames below are the actual on-disk names. Earlier versions of this table use
 
 | Document | Status | Purpose |
 |----------|--------|---------|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.4, 2 open decisions in its §11 | Sync design, failover, conflict resolution, rejection reconciliation |
-| `DATA-MODEL.md` | ✅ Done — v1.4, 3 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.5, 1 open decision in its §11 (§11.2) | Sync design, failover, conflict resolution, rejection reconciliation |
+| `DATA-MODEL.md` | ✅ Done — v1.5, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
 | `API-SPEC.md` | ✅ Done — v1.4 | All REST endpoints, sync event types, WebSocket events |
-| `ARCHITECTURE.md` | ✅ Done — v1.2 | This document |
+| `ARCHITECTURE.md` | ✅ Done — v1.3 | This document |
 | `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration. Supersedes §4 of this document, which is a summary. Label printer confirmed post-launch by its §6. |
 | `UI-GUIDELINES.md` | 🟡 Written at v1.0 — 3 gaps | Design rules for non-technical users. Its §5.5 void copy and the missing rejection-notice pattern are recorded in `SYNC-PROTOCOL.md` §11.2. |
-| `CODING-STANDARDS.md` | 🟡 Written at v1.1 — 3 conformance fixes needed | Repo layout, layering, naming, testing. Its §5.8 must conform to `API-SPEC.md` §1.4, §4.4 to `DATA-MODEL.md` §1.2, and §4.3 to `SYNC-PROTOCOL.md` §2.5. |
+| `CODING-STANDARDS.md` | 🟡 Written at v1.2 — 3 conformance fixes needed | Repo layout, layering, naming, testing. Its §5.8 must conform to `API-SPEC.md` §1.4, §4.4 to `DATA-MODEL.md` §1.2, and §4.3 to `SYNC-PROTOCOL.md` §2.5. |
 | `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
 | `DEPLOYMENT.md` | 🔲 Not written | §9 of this document is the only current source and is a summary. |
 | `SECURITY.md` | 🔲 Not written | §11 of this document is the only current source and is a summary. |
 
-**What 🟡 means in this table (added 1.2).** `CODING-STANDARDS.md` (v1.1) and `UI-GUIDELINES.md` (v1.0) are written in full at those versions, but reconciliation against them is still outstanding — the conformance fixes and gaps named in their rows above are open, and the §5 and §6 directory trees in this document have already been changed to match `CODING-STANDARDS.md` §4.1 and §5.1. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.
+**What 🟡 means in this table (added 1.2).** `CODING-STANDARDS.md` (v1.2) and `UI-GUIDELINES.md` (v1.0) are written in full at those versions, but reconciliation against them is still outstanding — the conformance fixes and gaps named in their rows above are open, and the §5 and §6 directory trees in this document have already been changed to match `CODING-STANDARDS.md` §4.1 and §5.1. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.

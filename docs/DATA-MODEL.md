@@ -1,9 +1,11 @@
 # G9POS Data Model
 
-**Version:** 1.4
+**Version:** 1.5
 **Status:** Draft
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.4:** Settles the one open schema decision this document was carrying. `SYNC-PROTOCOL.md` §11.1 is resolved as Option B, so §3.5 gains a single SQLite-only `rejected_at` column that lets a device stop counting rows from an event or group the server permanently rejected. The append-only rule is narrowed, not weakened: `inventory_events` still prohibits `updated_at` and `deleted_at`, nothing is ever hard-deleted, and the new marker is reachable only while `synced_at IS NULL` — so no server-accepted row can be hidden by it. §1.2 records the carve-out, §3.5 adds the column and a device-side stock query alongside the unchanged server query, §4 records the new dialect difference, §5 adds a partial index for the device stock path, and §9 decision 3 moves to §8 as resolved. Separately, §3.5 now states that `reference_id` is NULL for the standalone inventory types `INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, and `INVENTORY_RETURNED` — there is no causing parent entity, and no adjustments, damage, or return table exists or is being added. Grouped types (`INVENTORY_SOLD`, `INVENTORY_VOIDED`, `INVENTORY_RESTOCKED`) still carry the parent sale or order.
 
 **Changelog since 1.3:** No schema changes. Reconciled against `CODING-STANDARDS.md` v1.1, readable for the first time this pass. §1.2 now cites the specific conflicting text — §4.4's *"Every table that participates in sync must have `createdAt`, `updatedAt`, `deletedAt`, `deviceId`"*, which is wrong for six of the tables in §3 — together with its companion rule *"Always filter `deletedAt.isNull()` in every read query"*, which is unsatisfiable against `inventory_events`. §9 decision 1 records that `UI-GUIDELINES.md` §5.5 already takes the un-gated branch of that decision and promises finality the server can refuse.
 
@@ -27,11 +29,11 @@ Every column of type `TEXT` storing an ISO date (`YYYY-MM-DD` — e.g. `expenses
 
 The default shape for a device-originated business record is four sync columns: `created_at`, `updated_at`, `deleted_at`, `device_id`. Three classes of table deliberately depart from that default. Any coding standard, scaffold, or migration that asserts *"every synced table has all four"* is wrong — it must carve out the exemptions below, because the omissions are load-bearing, not oversights.
 
-**Confirmed conflict with `CODING-STANDARDS.md` §4.4 (v1.1).** Its Drift rules state: *"Every table that participates in sync must have `createdAt`, `updatedAt`, `deletedAt`, `deviceId`."* That is the unqualified claim this section exists to refute, and it is wrong for all three classes below — six of the tables in §3. The same section's *"Always filter `deletedAt.isNull()` in every read query"* is likewise unsatisfiable against `inventory_events`, which has no such column; the computed-stock query in §3.5 correctly has no `deleted_at` predicate. Both rules need the exemptions restated. This document owns the schema, so §4.4 is what changes.
+**Confirmed conflict with `CODING-STANDARDS.md` §4.4 (v1.2).** Its Drift rules state: *"Every table that participates in sync must have `createdAt`, `updatedAt`, `deletedAt`, `deviceId`."* That is the unqualified claim this section exists to refute, and it is wrong for all three classes below — six of the tables in §3. The same section's *"Always filter `deletedAt.isNull()` in every read query"* is likewise unsatisfiable against `inventory_events`, which has no such column; the computed-stock query in §3.5 correctly has no `deleted_at` predicate. Both rules need the exemptions restated. This document owns the schema, so §4.4 is what changes.
 
 | Class | Tables | Omits | Why |
 |---|---|---|---|
-| Append-only event log | `inventory_events` (§3.5) | `updated_at`, `deleted_at` | Rows are immutable once written. There is no update path and no soft delete: a mistake is corrected by *appending* a compensating event, never by editing or hiding an existing one (`SYNC-PROTOCOL.md` §4.1). Adding `deleted_at` here would make stock silently mutable and defeat the event log. **One case is unsettled:** rows written locally for a group the server then *permanently rejected* were never accepted anywhere, and the device must stop counting them — which this rule forbids. See §9 decision 3 and `SYNC-PROTOCOL.md` §11.1; this row must be updated when that is decided. |
+| Append-only event log | `inventory_events` (§3.5) | `updated_at`, `deleted_at` | Rows are immutable once written. There is no update path and no soft delete: a mistake is corrected by *appending* a compensating event, never by editing or hiding an existing one (`SYNC-PROTOCOL.md` §4.1). Adding `deleted_at` here would make stock silently mutable and defeat the event log, so that prohibition stands unchanged. **One narrow carve-out, settled in 1.5:** SQLite — and only SQLite — carries a local-only `rejected_at` marker for rows belonging to an event or group the server *permanently rejected*, which were therefore never accepted anywhere (§3.5). It is not a soft delete and not a delete path: it can only ever be set while `synced_at IS NULL`, so no server-accepted row is reachable by it, and accepted history remains exactly as immutable as before. See §8 and `SYNC-PROTOCOL.md` §11.1. |
 | Nested payload children | `sale_items` (§3.7), `supplier_order_items` (§3.11) | `updated_at`, `deleted_at`, `device_id` | These never sync as independent events. They travel inside their parent's event payload — per `API-SPEC.md` §5, `SALE_CREATED` "carries the sale + its `sale_items` in one event payload" and `SUPPLIER_ORDER_CREATED` "carries nested order items in the payload (no separate item-creation events)". The parent row carries the sync columns for the whole unit. |
 | Not device-originated | `devices` (§3.2, server only), `sync_queue` (§3.12, SQLite only), `users` (§3.1) | varies — see §3 | `devices` is the server-side registry and `sync_queue` is local outbound state; neither is replicated between devices (§4). `users` has no `device_id` and there is no `USER_*` event type in `API-SPEC.md` §5, so user records are not created by the sync queue — how they *are* provisioned is an open decision (§9). |
 
@@ -164,7 +166,7 @@ Core product catalogue. Stock level is NOT stored here — it is computed from `
 
 ### 3.5 `inventory_events`
 
-Append-only log of every stock change. Never update or delete rows in this table.
+Append-only log of every stock change. Rows are never hard-deleted, and the table does not use `updated_at` or `deleted_at`. The only permitted update to an existing SQLite row is setting `rejected_at`, and only while `synced_at IS NULL`. Accepted rows remain immutable; mistakes in accepted history are still corrected by appending, never by editing or hiding the original.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -172,7 +174,7 @@ Append-only log of every stock change. Never update or delete rows in this table
 | `product_id` | UUID | FK → products |
 | `event_type` | TEXT | See event types below |
 | `quantity_delta` | INTEGER | Signed: negative = stock reduction, positive = addition |
-| `reference_id` | UUID | FK to the sale, order, or adjustment that caused this. Also the sync batching/grouping key — see `SYNC-PROTOCOL.md` §2.5 |
+| `reference_id` | UUID | Nullable. Causal-group key and, when set, FK to the parent sale or supplier order — see `SYNC-PROTOCOL.md` §2.5. **Set** for grouped inventory events (`INVENTORY_SOLD`, `INVENTORY_VOIDED`, `INVENTORY_RESTOCKED`) to that parent. **NULL** for standalone inventory events (`INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, `INVENTORY_RETURNED`): those have no causing parent entity, and no adjustments, damage, or return table exists or is being added. `reference_type` still records `adjustment` / `damage` / `return` so the event's origin stays readable |
 | `reference_type` | TEXT | `sale`, `sale_void`, `restock`, `adjustment`, `damage`, `return` |
 | `note` | TEXT | Optional owner note (e.g. "damaged in flood"). **Required** (application-layer validation, not a NOT NULL constraint) for `adjustment` and `damage` reference types — see `API-SPEC.md` §5 |
 | `operator_id` | UUID | FK → users |
@@ -180,6 +182,7 @@ Append-only log of every stock change. Never update or delete rows in this table
 | `created_at` | INTEGER | Unix ms — device clock |
 | `server_received_at` | INTEGER | Unix ms — server clock (PostgreSQL only) |
 | `synced_at` | INTEGER | Unix ms — when this device confirmed sync (SQLite only) |
+| `rejected_at` | INTEGER | Unix ms — when this device learned the server permanently rejected this row's event or group (SQLite only, local-only, nullable). See "Locally rejected rows" below |
 
 **Event types:**
 
@@ -199,7 +202,31 @@ FROM inventory_events
 WHERE product_id = $1;
 ```
 
-**No `deleted_at` filter (corrected in 1.2):** this table has no `deleted_at` column and must never gain one — see §1.2. Versions of this document up to 1.1 included `AND deleted_at IS NULL` here, which referenced a field that does not exist and disagreed with the same query in `SYNC-PROTOCOL.md` §3.4. Every row ever written counts toward stock, permanently. A row entered in error is corrected by appending an `INVENTORY_ADJUSTED` event, not by removing or hiding the original.
+**Computed stock query (device, SQLite — added in 1.5):**
+```sql
+SELECT SUM(quantity_delta)
+FROM inventory_events
+WHERE product_id = ?
+  AND rejected_at IS NULL;
+```
+
+The server query carries no such predicate and never will — the server only ever holds rows it accepted, so it has nothing to exclude. The two queries agree on every row the server has accepted, which is the set that defines stock. The device-side predicate exists solely to discount rows that were never accepted anywhere; see `SYNC-PROTOCOL.md` §3.4.
+
+#### Locally rejected rows (added in 1.5)
+
+`rejected_at` is written by one code path only: the device's rejection handler, when `POST /v1/sync/events` returns this row's event or group in `rejected[]` (`API-SPEC.md` §6.1, `SYNC-PROTOCOL.md` §4.4). It records that the server refused the write permanently, so these rows describe a stock movement that happened nowhere — not on the server, and not on any other device. The handler identifies grouped rows by `reference_id` and standalone rows by event `id`; both paths still require `synced_at IS NULL`.
+
+**Invariant:** `rejected_at IS NOT NULL` implies `synced_at IS NULL`.
+
+That is the whole safety argument for the column, so it must be enforced at runtime rather than assumed — in the repository that performs the write and as a table-level `CHECK` constraint, not by a debug-only assertion. A row the server has confirmed can never be marked, which is why this is a carve-out from §1.2 rather than a hole in it.
+
+Three further properties hold by design:
+
+- **Local-only.** The column exists in SQLite alone. It is never sent to the server, never appears in an event payload, and is never replicated to another device. There is no PostgreSQL counterpart because the server has no rejected rows to mark.
+- **Not a delete path.** Nothing is hard-deleted and no other column is edited. The row remains in the log so the owner can be told which movement did not stick (`SYNC-PROTOCOL.md` §4.4) and so the device's own history stays auditable. Marked rows are excluded from the stock sum above and from nothing else.
+- **Idempotent.** Marking an already-marked row changes nothing, which is what lets the rejection handler safely process the same `rejected[]` entry twice (`SYNC-PROTOCOL.md` §4.4).
+
+**No `deleted_at` filter (corrected in 1.2):** this table has no `deleted_at` column and must never gain one — see §1.2. Versions of this document up to 1.1 included `AND deleted_at IS NULL` here, which referenced a field that does not exist and disagreed with the same query in `SYNC-PROTOCOL.md` §3.4. Every row the server has accepted counts toward stock, permanently — the only rows a device ever discounts are those it holds from a permanently rejected event or group, which the server never accepted at all (see above, added 1.5). A row entered in error is corrected by appending an `INVENTORY_ADJUSTED` event, not by removing or hiding the original.
 
 ---
 
@@ -357,10 +384,10 @@ Line items within a supplier order.
 | ID type | TEXT (UUID string) | UUID native type |
 | Timestamps | INTEGER (Unix ms) | TIMESTAMPTZ |
 | Booleans | INTEGER (0/1) | BOOLEAN |
-| Extra columns | `synced_at` on most tables | `server_received_at` on `inventory_events` (§3.5) and `sales` (§3.6) |
+| Extra columns | `synced_at` on most tables; `rejected_at` on `inventory_events` (§3.5, local-only, added 1.5) | `server_received_at` on `inventory_events` (§3.5) and `sales` (§3.6) |
 | sync_queue | Present | Not present |
 | `devices` (§3.2) | Not present | Present |
-| Stock computation | Cached locally, recomputed after sync | Always computed from events |
+| Stock computation | Cached locally, recomputed after sync, excluding rows marked `rejected_at` (§3.5) | Always computed from events |
 | Date/day resolution | N/A — device only stores Unix ms, never computes "which shop-day" locally | `SHOP_TIMEZONE` constant applied server-side for all day-boundary logic (§1.1) |
 
 ---
@@ -385,6 +412,10 @@ CREATE INDEX idx_sync_queue_reference_id ON sync_queue(reference_id);
 
 -- Inventory event lookup per product
 CREATE INDEX idx_inventory_events_product_id ON inventory_events(product_id);
+
+-- Device stock computation, which skips locally rejected rows (added 1.5)
+CREATE INDEX idx_inventory_events_product_stock
+  ON inventory_events(product_id) WHERE rejected_at IS NULL;
 ```
 
 ### PostgreSQL (additional)
@@ -409,7 +440,7 @@ These are always calculated at query time, never stored as columns:
 
 | Value | How computed |
 |-------|-------------|
-| Current stock | `SUM(quantity_delta)` from `inventory_events` per product |
+| Current stock | Server: `SUM(quantity_delta)` from `inventory_events` per product. Device: the same sum with `AND rejected_at IS NULL` (§3.5) |
 | Sale total | `SUM(subtotal_mmk)` from `sale_items` per sale |
 | Daily revenue | `SUM(total_amount_mmk)` from `sales` where `status = completed` and date matches (shop-day, §1.1) |
 | Daily profit | Daily revenue − `SUM(cost_price_mmk × quantity)` from `sale_items` joined to products |
@@ -446,15 +477,18 @@ Delivered in chunks of 200 rows per request. Download order: products and catego
 | `inventory_events` soft delete | None — the table is append-only and has no `deleted_at`. Corrections are appended, never applied in place. See §1.2 and §3.5 (added 1.2) |
 | Void-window anchor | `sales.server_received_at`, PostgreSQL only. Server is the sole enforcer; the device submits optimistically and reverts on rejection. See §3.6 (added 1.2) |
 | Standard sync columns | Four by default (`created_at`, `updated_at`, `deleted_at`, `device_id`), with three documented exemption classes — see §1.2 (added 1.2) |
+| Undoing an unsynced `inventory_events` row from a permanently rejected group | Local-only `rejected_at` marker on SQLite, excluded from the device's stock sum. Never a hard delete, never replicated, and settable only while `synced_at IS NULL`, so accepted rows stay immutable. `updated_at` and `deleted_at` remain prohibited on this table. See §1.2, §3.5 and `SYNC-PROTOCOL.md` §11.1 — was §9 decision 3 (resolved 1.5) |
+| `reference_id` on standalone inventory events | NULL for `INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, and `INVENTORY_RETURNED`. Grouped types (`INVENTORY_SOLD`, `INVENTORY_VOIDED`, `INVENTORY_RESTOCKED`) still carry the parent sale or order. No adjustments, damage, or return table exists. See §3.5 and `SYNC-PROTOCOL.md` §2.5 (added 1.5) |
 
 ---
 
-## 9. Open Decisions (added in 1.2, extended in 1.3)
+## 9. Open Decisions (added in 1.2, extended in 1.3, decision 3 resolved in 1.5)
 
 These surfaced while resolving inconsistencies in 1.2 and 1.3. None is answerable from existing documentation, so they are recorded here rather than guessed at. **Each needs a decision before the affected code is written.**
+
+Decision 3, how a device undoes an unsynced `inventory_events` row from a permanently rejected group, was settled in 1.5 and now appears in §8. `SYNC-PROTOCOL.md` §11.1 records the reasoning.
 
 | # | Open decision | What is already fixed | What is undecided | Who decides |
 |---|---|---|---|---|
 | 1 | Should `sales.server_received_at` be mirrored into SQLite? | The column exists server-side and the server is the sole enforcer of the void window (§3.6). Correctness does not depend on this decision. | Purely a UX question: without a local copy, the app must show the void action on *every* sale and let some attempts fail and roll back (`SYNC-PROTOCOL.md` §4.4). With a local copy it could grey the action out once the shop-day has passed. The second is friendlier for a non-technical operator but adds a field to the sync-pull payload and a local shop-day computation that §4 currently forbids. **Now confirmed live (1.4):** `UI-GUIDELINES.md` §5.5 offers the void action on any sale in history with no shop-day gating, and promises "This cannot be undone" — so today's spec takes the first branch and states a guarantee the server can refuse. See `SYNC-PROTOCOL.md` §11.2; decide the two together. | Product owner, with `UI-GUIDELINES.md` — needed before the sales-history screen is built. |
 | 2 | How is a `users` row created? | `users` (§3.1) is documented as a table, and `role` (`owner`/`staff`) is used throughout `API-SPEC.md`. | There is no `USER_CREATED`/`USER_UPDATED` event type in `API-SPEC.md` §5, and `API-SPEC.md` §1.1 forbids adding a REST write for business records. So staff accounts currently have no creation path at all. §3.1 notes launch is "one owner account", which defers but does not answer the question. | Product owner — decide whether staff accounts are in v1 scope at all. If yes, `API-SPEC.md` must define the mechanism; if no, the `staff` role should be marked post-launch. |
-| 3 | How does a device undo an **unsynced** `inventory_events` row from a permanently rejected group? (added 1.3) | The table is append-only with no `deleted_at` and no update path (§1.2, §3.5), and accepted events are never rolled back (`SYNC-PROTOCOL.md` §4.1). Both stay true. | A permanently rejected group (`API-SPEC.md` §6.1) committed nothing server-side, but the device already appended its rows locally and sums them for stock (`SYNC-PROTOCOL.md` §3.4). Either §1.2 narrows to server-accepted rows and the device hard-deletes them, or `inventory_events` gains a local-only exclusion column that §1.2 currently forbids. Nothing in these documents chooses. | Architecture owner — **full statement and options in `SYNC-PROTOCOL.md` §11.1**, which owns this decision. §1.2 and §3.5 must be updated in the same change. |
