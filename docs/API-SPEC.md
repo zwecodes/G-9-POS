@@ -68,7 +68,7 @@ Any lower-authority document, helper struct, or scaffolding example that describ
 | `UNAUTHORIZED` | 401 | Missing/invalid/expired token |
 | `FORBIDDEN` | 403 | Valid token, insufficient role |
 | `NOT_FOUND` | 404 | Resource doesn't exist or is soft-deleted |
-| `CONFLICT` | 409 | LWW conflict, or a business rule rejected an event (e.g. void outside the allowed day) |
+| `CONFLICT` | 409 | LWW conflict, or a business rule rejected an event (e.g. void outside the allowed day). For events submitted via the sync queue this is a **per-event** outcome reported in the response body, not the batch's HTTP status — see §6.1 |
 | `PAYLOAD_TOO_LARGE` | 413 | Batch exceeds 5MB |
 | `RATE_LIMITED` | 429 | Too many requests, see §12 |
 | `INTERNAL_ERROR` | 500 | Unhandled server error |
@@ -185,11 +185,11 @@ Owner, dashboard. Standard filtered reads.
 
 | Event type | Role | Notes |
 |---|---|---|
-| `CATEGORY_CREATED` / `CATEGORY_UPDATED` / `CATEGORY_DELETED` | Owner | LWW. Delete is soft (`deleted_at`). **Resolved in 1.2:** `CATEGORY_DELETED` is rejected with `CONFLICT` (event returned unaccepted in the sync response, with a `blocking_product_count` field) if any non-deleted product still references the category. The owner must reassign or deactivate those products first — a few seconds of friction that prevents orphaned `category_id` references from showing up confusingly in reports later. |
+| `CATEGORY_CREATED` / `CATEGORY_UPDATED` / `CATEGORY_DELETED` | Owner | LWW. Delete is soft (`deleted_at`). **Resolved in 1.2:** `CATEGORY_DELETED` is rejected with `CONFLICT` if any non-deleted product still references the category — returned in `rejected[]` as `CATEGORY_HAS_PRODUCTS` with `detail.blocking_product_count` (§6.1). The owner must reassign or deactivate those products first — a few seconds of friction that prevents orphaned `category_id` references from showing up confusingly in reports later. |
 | `PRODUCT_CREATED` / `PRODUCT_UPDATED` / `PRODUCT_DELETED` | Owner | LWW per `SYNC-PROTOCOL.md` §4. `id` is client-generated. |
-| `INVENTORY_ADJUSTED` / `INVENTORY_DAMAGED` | Owner | `note` field **required** — an unexplained stock change becomes a mystery weeks later. |
+| `INVENTORY_ADJUSTED` / `INVENTORY_DAMAGED` | Owner | `note` field **required** — an unexplained stock change becomes a mystery weeks later. A missing `note` is a permanent rejection, `EVENT_VALIDATION_FAILED` (§6.1). |
 | `SALE_CREATED` | Owner, staff | Carries the sale + its `sale_items` in one event payload. Always submitted as part of a **group** with its inventory events — see §6. **`sale_number` collision handling resolved in 1.2:** `sale_number` (e.g. `S-00142`) is a client-generated, display-only label with **no uniqueness guarantee**. The UUID `id` is the real primary key everywhere it matters (line items, receipts, void references, sync idempotency). If the tablet and phone each generate `S-00142` while both offline, it is cosmetically confusing on a printed receipt but never a data-integrity issue — nothing in the system looks up a sale by `sale_number`. A device-prefixed or server-issued sequence was considered and rejected as unnecessary complexity for a cosmetic concern at this scale. |
-| `SALE_VOIDED` | Owner only | Rejected with `CONFLICT` if outside the same shop-day as the original sale's `server_received_at` (§1.7). Generates the group's `INVENTORY_VOIDED` events. Role checked server-side even though the app UI hides the void action from staff — never trust the client. |
+| `SALE_VOIDED` | Owner only | Rejected with `CONFLICT` if outside the same shop-day as the original sale's `server_received_at` (`DATA-MODEL.md` §3.6, §1.7) — returned in `rejected[]` as `VOID_WINDOW_CLOSED` (§6.1), and the device reverts its local void (`SYNC-PROTOCOL.md` §4.4). Generates the group's `INVENTORY_VOIDED` events. Role checked server-side even though the app UI hides the void action from staff — never trust the client. |
 | `EXPENSE_CREATED` / `EXPENSE_UPDATED` / `EXPENSE_DELETED` | Owner | LWW, soft delete. |
 | `SUPPLIER_CREATED` / `SUPPLIER_UPDATED` / `SUPPLIER_DELETED` | Owner | LWW, soft delete. |
 | `SUPPLIER_ORDER_CREATED` / `SUPPLIER_ORDER_UPDATED` | Owner | Carries nested order items in the payload (no separate item-creation events). |

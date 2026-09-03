@@ -82,7 +82,7 @@ CREATE TABLE sync_queue (
 | 3rd     | 30 seconds         |
 | 4th+    | 5 minutes          |
 
-**Corrected in 1.2 — three outcomes, not two.** Up to version 1.1 this section said only that "items are never deleted from the queue until the server returns HTTP 200 or 409 (conflict resolved)". That conflated two very different meanings of 409 and left a third case undefined. A submitted event has exactly three possible fates:
+**Corrected in 1.2.** Up to version 1.1 this section said only that "items are never deleted from the queue until the server returns HTTP 200 or 409 (conflict resolved)". That conflated two very different meanings of 409 — a resolved LWW conflict and a refused business rule — and left the refusal case with no defined behaviour at all. A submitted event has exactly four possible fates, three of them terminal:
 
 | Outcome | Server signals | Queue action | Local data action |
 |---|---|---|---|
@@ -111,16 +111,18 @@ Some events are causally linked: a sale and the `INVENTORY_SOLD` events it gener
 - Standalone events (no `reference_id` — e.g. a `PRODUCT_UPDATED`) are batched normally, filling in around whole groups.
 - Server-side, each group is applied inside a single database transaction — see `API-SPEC.md` §6 for the server-side contract. This document only governs how the device builds and retries batches.
 
-**`reference_id` must be NULL for standalone events (binding rule, stated explicitly in 1.2).** `reference_id` is *only* a causal-group key. It is not a foreign key to the entity being written, and it is not a convenience copy of the row's own `id`. When a write has no causally-linked sibling events, the field is NULL.
+This rule exists because without it, a sale event and its stock-deduction events could land in different HTTP requests, creating a window where a sale is recorded server-side with no matching stock movement — see `API-SPEC.md` §6 for the full failure scenario this closes.
 
-This is worth stating as a rule because setting it to the entity's own `id` is a natural-looking mistake with two real consequences:
+#### `reference_id` is NULL for standalone events (binding rule, stated explicitly in 1.2)
+
+`reference_id` is *only* a causal-group key. It is not a foreign key to the entity being written, and it is not a convenience copy of the row's own `id`. When a write has no causally-linked sibling events, the field is NULL — as already declared in the §2.2 schema and `DATA-MODEL.md` §3.12.
+
+This is worth stating as an explicit rule because setting it to the entity's own `id` is a natural-looking mistake with two real consequences:
 
 1. **Spurious single-event groups.** Every standalone write becomes its own "group", so the flusher must reason about group boundaries for events that have none, and the server opens a transaction per product edit.
-2. **Unrelated writes silently merged.** Two independent edits to the *same* product would share a `reference_id` and therefore become one atomic group — so an old, queued edit could be rolled back or retried together with a new, unrelated one. This is a correctness bug, not just noise.
+2. **Unrelated writes silently merged.** Two independent edits to the *same* product would share a `reference_id` and therefore become one atomic group — so an old, queued edit could be reverted or retried together with a new, unrelated one. That is a correctness bug, not just noise.
 
-Concretely: a `PRODUCT_UPDATED` for product `P` has `reference_id = NULL`. An `INVENTORY_SOLD` for product `P` arising from sale `S` has `reference_id = S` — the sale that caused it, never `P` and never the event's own `id`.
-
-This exists because without it, a sale event and its stock-deduction events could land in different HTTP requests, creating a window where a sale is recorded server-side with no matching stock movement — see `API-SPEC.md` §6 for the full failure scenario this closes.
+Concretely: a `PRODUCT_UPDATED` for product `P` has `reference_id = NULL`. An `INVENTORY_SOLD` for product `P` arising from sale `S` has `reference_id = S` — the sale that caused it, never `P`, and never the event's own `id`.
 
 ---
 
@@ -228,11 +230,14 @@ Reverting is correct here, and it does not contradict §4.1's "events are not ro
 
 #### What "revert" means per rejection
 
-| Rejected event | Local write being undone | Revert action |
+There is one row here for every `reason` code in `API-SPEC.md` §6.1, and that must stay true — a reason code with no defined revert is a device that does not know how to recover.
+
+| `reason` (`API-SPEC.md` §6.1) | Local write being undone | Revert action |
 |---|---|---|
-| `CATEGORY_DELETED` (blocking products) | `deleted_at` was set on the category | Clear `deleted_at` — the category reappears. Tell the owner how many products still use it, using the `blocking_product_count` the server returned (`API-SPEC.md` §5). |
-| `SALE_VOIDED` (outside shop-day, or role) | `sales.status` → `voided`, `voided_at` / `voided_by` / `void_reason` set, **and** one `INVENTORY_VOIDED` row appended per line item | Restore `status = completed`, clear the three void columns, and discard the group's locally-written `INVENTORY_VOIDED` rows. The sale stands as completed. |
-| Any owner-only event submitted under a staff PIN (`API-SPEC.md` §1.6) | Whatever that event wrote | Revert that write by the same rule, and surface it as a permissions message, not an error. |
+| `CATEGORY_HAS_PRODUCTS` | `deleted_at` was set on the category | Clear `deleted_at` — the category reappears. Tell the owner how many products still use it, using the `blocking_product_count` in the response `detail`. |
+| `VOID_WINDOW_CLOSED` | `sales.status` → `voided`, `voided_at` / `voided_by` / `void_reason` set, **and** one `INVENTORY_VOIDED` row appended per line item | Restore `status = completed`, clear the three void columns, and discard the group's locally-written `INVENTORY_VOIDED` rows. The sale stands as completed. |
+| `ROLE_NOT_PERMITTED` | Whatever that event wrote — an owner-only event submitted under a staff PIN, or a mutating event from a `dashboard_viewer` token | Revert that write by the same rule as its event type above, and surface it as a permissions message rather than an error. |
+| `EVENT_VALIDATION_FAILED` | Whatever that event wrote — at present an `INVENTORY_ADJUSTED` / `INVENTORY_DAMAGED` queued without its required `note` | Discard the locally-written `INVENTORY_*` row and restore the previous stock figure. The owner must re-enter the adjustment with a note; the original payload cannot be repaired in the queue. |
 
 After discarding locally-written `INVENTORY_*` rows, the device recomputes its cached `computed_stock` for the affected products the same way it does after any sync (§3.4) — no special path.
 

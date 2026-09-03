@@ -5,7 +5,7 @@
 **Last updated:** 2026-09-03
 **Author:** Architecture Team
 
-**Changelog since 1.1:** Three schema inconsistencies resolved. (1) Removed `AND deleted_at IS NULL` from the §3.5 computed-stock query — `inventory_events` is append-only and has never had a `deleted_at` column, so the filter referenced a field that does not exist and contradicted the identical query in `SYNC-PROTOCOL.md` §3.4. (2) Added `server_received_at` to `sales` (§3.6, PostgreSQL only) — the same-shop-day void rule in this document and in `API-SPEC.md` §5 both evaluate against it, but the column was never declared. (3) Added §1.2 (column conventions and exemptions), which states explicitly which tables omit the standard sync columns and why, so that a blanket "every synced table has `created_at`/`updated_at`/`deleted_at`/`device_id`" rule cannot be asserted against append-only and nested-payload tables. Added §9 for two decisions this pass surfaced but could not settle from existing documentation.
+**Changelog since 1.1:** Three schema inconsistencies resolved. (1) Removed `AND deleted_at IS NULL` from the §3.5 computed-stock query — `inventory_events` is append-only and has never had a `deleted_at` column, so the filter referenced a field that does not exist and contradicted the identical query in `SYNC-PROTOCOL.md` §3.4. (2) Added `server_received_at` to `sales` (§3.6, PostgreSQL only) — the same-shop-day void rule in this document and in `API-SPEC.md` §5 both evaluate against it, but the column was never declared. (3) Added §1.2 (column conventions and exemptions), which states explicitly which tables omit the standard sync columns and why, so that a blanket "every synced table has `created_at`/`updated_at`/`deleted_at`/`device_id`" rule cannot be asserted against append-only and nested-payload tables. Added §9 for two decisions this pass surfaced but could not settle from existing documentation. Also corrected the §2 entity diagram, which referenced a `sale_voided_events` table that §3 never defined and a `device_registry` table that is really `devices` (§3.2) under a second name.
 
 **Changelog since 1.0:** Added §1.1 (Shop timezone) documenting that all date-bounded fields (`expense_date`, `order_date`, report groupings, the sale-void same-day rule) resolve against a fixed server-side timezone constant defined in `API-SPEC.md` §1.7 — not device-local time. This was previously undocumented and could have been misread as "each device's own date," which would have broken the same-day void rule across devices with clock drift.
 
@@ -44,7 +44,7 @@ The soft-delete principle below applies to every table that **has** a `deleted_a
 
 ```
 users
-  └── devices (one user, multiple devices)
+  └── devices                  (one user, multiple devices — server only, §3.2)
 
 categories
   └── products
@@ -53,16 +53,19 @@ categories
 
 sales
   └── sale_items
-  └── sale_voided_events       (if sale is cancelled)
 
 expenses
 suppliers
   └── supplier_orders
         └── supplier_order_items
 
-sync_queue                     (local SQLite only)
-device_registry                (server only)
+sync_queue                     (local SQLite only, §3.12)
 ```
+
+**Two corrections in 1.2.** This diagram previously listed a `sale_voided_events` table and a separate `device_registry` table. Neither exists:
+
+- **There is no `sale_voided_events` table.** A void is recorded *in place* on the `sales` row — `status`, `voided_at`, `voided_by`, `void_reason` (§3.6) — together with one `INVENTORY_VOIDED` row per line item in `inventory_events`, submitted as one atomic group (`API-SPEC.md` §6). Nothing in §3 ever defined a separate void table, and none is needed.
+- **`device_registry` and `devices` were the same table under two names.** The name is `devices` (§3.2). It appears once, under `users`, and is server-side only.
 
 ---
 
@@ -350,7 +353,7 @@ Line items within a supplier order.
 | Booleans | INTEGER (0/1) | BOOLEAN |
 | Extra columns | `synced_at` on most tables | `server_received_at` on `inventory_events` (§3.5) and `sales` (§3.6) |
 | sync_queue | Present | Not present |
-| device_registry | Not present | Present |
+| `devices` (§3.2) | Not present | Present |
 | Stock computation | Cached locally, recomputed after sync | Always computed from events |
 | Date/day resolution | N/A — device only stores Unix ms, never computes "which shop-day" locally | `SHOP_TIMEZONE` constant applied server-side for all day-boundary logic (§1.1) |
 
