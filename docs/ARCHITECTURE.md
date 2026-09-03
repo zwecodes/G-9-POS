@@ -1,9 +1,13 @@
 # G9POS System Architecture
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Draft  
-**Last updated:** 2026-07-09  
+**Last updated:** 2026-09-03  
 **Author:** Architecture Team
+
+**Changelog since 1.0:** Consistency pass; no architectural changes. (1) Added the missing `categories` feature and backend package to §5 and §6 — `API-SPEC.md` §5 defines `CATEGORY_CREATED`/`UPDATED`/`DELETED` events and `DATA-MODEL.md` §3.3 defines the table, but neither structure listed anywhere for them to live. (2) Added permanent-event-rejection handling to the §6 request flow and the §8 summary table, reflecting `API-SPEC.md` §6.1 and `SYNC-PROTOCOL.md` §4.4. (3) Rewrote §13, which still listed `api-spec.md` as "Next" long after it reached v1.3, and corrected every document filename to match the actual uppercase files.
+
+**Scope note:** §5, §6, §8, §9 and §11 of this document are *summaries*. Where this document and a domain specification disagree, the specification wins — `API-SPEC.md` for endpoints and events, `DATA-MODEL.md` for schema, `SYNC-PROTOCOL.md` for sync and conflict behaviour, `HARDWARE-INTEGRATION.md` for hardware. The two sections that are authoritative here and nowhere else are §3 (device roles and the active-POS rule) and §10 (what the remote dashboard may and may not do).
 
 ---
 
@@ -141,6 +145,7 @@ apps/mobile/
       auth/            ← login, PIN screen
       pos/             ← sale screen, cart, checkout
       products/        ← product list, add/edit
+      categories/      ← category list, add/edit
       inventory/       ← stock levels, adjustments
       sales/           ← sales history, void
       expenses/        ← add/view expenses
@@ -179,7 +184,8 @@ services/backend/
     server/           ← main entrypoint
   internal/
     auth/             ← JWT issue, refresh, validate
-    sync/             ← event ingestion, conflict resolution
+    sync/             ← event ingestion, conflict resolution, rejection
+    categories/       ← category events
     products/         ← product CRUD
     inventory/        ← event log, stock computation
     sales/            ← sale records, void logic
@@ -211,6 +217,7 @@ Sync Handler
   ├── Apply inventory events (append to event log)
   ├── Apply LWW updates (compare timestamps, keep latest)
   ├── Detect conflicts (return in response)
+  ├── Reject business-rule violations (return in `rejected[]` — API-SPEC.md §6.1)
   └── Detect negative stock (flag product)
   │
   ▼
@@ -274,7 +281,7 @@ Staff log in with a 4-digit PIN on the device after the owner has authenticated 
 
 ## 8. Sync Architecture Summary
 
-*(Full detail in sync-protocol.md — summarised here for reference)*
+*(Full detail in `SYNC-PROTOCOL.md` — summarised here for reference)*
 
 | Concern | Decision |
 |---------|----------|
@@ -285,9 +292,10 @@ Staff log in with a 4-digit PIN on the device after the owner has authenticated 
 | Offline operation | Full functionality from local SQLite indefinitely |
 | Conflict on stock | Applied as-is, negative stock flagged, owner alerted |
 | Conflict on LWW | Later timestamp wins, server notifies losing device |
+| Permanent rejection | Server returns the event in `rejected[]`; device reverts its local optimistic write and tells the owner — never retried, no compensating event (`API-SPEC.md` §6.1, `SYNC-PROTOCOL.md` §4.4) |
 | Clock skew | Server uses `server_received_at` as tiebreaker if delta < 5s |
 | Idempotency | Every event has a UUID — server ignores duplicates |
-| Failover | Phone pre-authenticated, background synced, one-tap activation |
+| Failover | Phone pre-authenticated, background synced, one-tap activation via the `DEVICE_ACTIVATED` queue event — no connectivity required |
 
 ---
 
@@ -383,12 +391,17 @@ To keep the first version shippable and reliable, these are explicitly deferred:
 
 ## 13. Next Documentation
 
+Filenames below are the actual on-disk names. Earlier versions of this table used lowercase, hyphenated names that did not match any file in `docs/`.
+
 | Document | Status | Purpose |
 |----------|--------|---------|
-| `sync-protocol.md` | ✅ Done | Sync design, failover, conflict resolution |
-| `data-model.md` | ✅ Done | Database schema for SQLite and PostgreSQL |
-| `architecture.md` | ✅ Done | This document |
-| `api-spec.md` | 🔲 Next | All REST and WebSocket endpoints |
-| `hardware-integration.md` | 🔲 Pending | Scanner, printer protocols and Flutter integration |
-| `ui-ux-guidelines.md` | 🔲 Pending | Design rules for non-technical users |
-| `requirements.md` | 🔲 Pending | Formal in-scope / out-of-scope for v1 |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.2 | Sync design, failover, conflict resolution, rejection reconciliation |
+| `DATA-MODEL.md` | ✅ Done — v1.2, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
+| `API-SPEC.md` | ✅ Done — v1.3 | All REST endpoints, sync event types, WebSocket events |
+| `ARCHITECTURE.md` | ✅ Done — v1.1 | This document |
+| `HARDWARE-INTEGRATION.md` | 🔲 Not written | Scanner, printer protocols and Flutter integration. §4 of this document is the only current source and is a summary. |
+| `UI-GUIDELINES.md` | 🔲 Not written | Design rules for non-technical users |
+| `CODING-STANDARDS.md` | 🔲 Not written | Repo layout, layering, naming, testing. Must conform to `API-SPEC.md` §1.4 and `DATA-MODEL.md` §1.2 when authored. |
+| `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
+| `DEPLOYMENT.md` | 🔲 Not written | §9 of this document is the only current source and is a summary. |
+| `SECURITY.md` | 🔲 Not written | §11 of this document is the only current source and is a summary. |
