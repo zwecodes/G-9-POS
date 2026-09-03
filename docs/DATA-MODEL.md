@@ -1,9 +1,11 @@
 # G9POS Data Model
 
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Draft
 **Last updated:** 2026-09-03
 **Author:** Architecture Team
+
+**Changelog since 1.2:** No schema changes. Recorded one previously unstated conflict between §1.2 and the rejection-reconciliation rule in `SYNC-PROTOCOL.md` §4.4: a device that locally appended `inventory_events` rows for a group the server then permanently rejected must stop counting them, but §1.2 grants the table no update and no delete path. §1.2 now flags that case and §9 carries it as decision 3; `SYNC-PROTOCOL.md` §11.1 owns the decision and states the two available mechanisms. Both §1.2 and §3.5 will need updating once it is settled.
 
 **Changelog since 1.1:** Three schema inconsistencies resolved. (1) Removed `AND deleted_at IS NULL` from the §3.5 computed-stock query — `inventory_events` is append-only and has never had a `deleted_at` column, so the filter referenced a field that does not exist and contradicted the identical query in `SYNC-PROTOCOL.md` §3.4. (2) Added `server_received_at` to `sales` (§3.6, PostgreSQL only) — the same-shop-day void rule in this document and in `API-SPEC.md` §5 both evaluate against it, but the column was never declared. (3) Added §1.2 (column conventions and exemptions), which states explicitly which tables omit the standard sync columns and why, so that a blanket "every synced table has `created_at`/`updated_at`/`deleted_at`/`device_id`" rule cannot be asserted against append-only and nested-payload tables. Added §9 for two decisions this pass surfaced but could not settle from existing documentation. Also corrected the §2 entity diagram, which referenced a `sale_voided_events` table that §3 never defined and a `device_registry` table that is really `devices` (§3.2) under a second name.
 
@@ -25,7 +27,7 @@ The default shape for a device-originated business record is four sync columns: 
 
 | Class | Tables | Omits | Why |
 |---|---|---|---|
-| Append-only event log | `inventory_events` (§3.5) | `updated_at`, `deleted_at` | Rows are immutable once written. There is no update path and no soft delete: a mistake is corrected by *appending* a compensating event, never by editing or hiding an existing one (`SYNC-PROTOCOL.md` §4.1). Adding `deleted_at` here would make stock silently mutable and defeat the event log. |
+| Append-only event log | `inventory_events` (§3.5) | `updated_at`, `deleted_at` | Rows are immutable once written. There is no update path and no soft delete: a mistake is corrected by *appending* a compensating event, never by editing or hiding an existing one (`SYNC-PROTOCOL.md` §4.1). Adding `deleted_at` here would make stock silently mutable and defeat the event log. **One case is unsettled:** rows written locally for a group the server then *permanently rejected* were never accepted anywhere, and the device must stop counting them — which this rule forbids. See §9 decision 3 and `SYNC-PROTOCOL.md` §11.1; this row must be updated when that is decided. |
 | Nested payload children | `sale_items` (§3.7), `supplier_order_items` (§3.11) | `updated_at`, `deleted_at`, `device_id` | These never sync as independent events. They travel inside their parent's event payload — per `API-SPEC.md` §5, `SALE_CREATED` "carries the sale + its `sale_items` in one event payload" and `SUPPLIER_ORDER_CREATED` "carries nested order items in the payload (no separate item-creation events)". The parent row carries the sync columns for the whole unit. |
 | Not device-originated | `devices` (§3.2, server only), `sync_queue` (§3.12, SQLite only), `users` (§3.1) | varies — see §3 | `devices` is the server-side registry and `sync_queue` is local outbound state; neither is replicated between devices (§4). `users` has no `device_id` and there is no `USER_*` event type in `API-SPEC.md` §5, so user records are not created by the sync queue — how they *are* provisioned is an open decision (§9). |
 
@@ -443,11 +445,12 @@ Delivered in chunks of 200 rows per request. Download order: products and catego
 
 ---
 
-## 9. Open Decisions (added in 1.2)
+## 9. Open Decisions (added in 1.2, extended in 1.3)
 
-These surfaced while resolving the 1.2 inconsistencies. Neither is answerable from existing documentation, so both are recorded here rather than guessed at. **Each needs a product decision before the affected code is written.**
+These surfaced while resolving inconsistencies in 1.2 and 1.3. None is answerable from existing documentation, so they are recorded here rather than guessed at. **Each needs a decision before the affected code is written.**
 
 | # | Open decision | What is already fixed | What is undecided | Who decides |
 |---|---|---|---|---|
 | 1 | Should `sales.server_received_at` be mirrored into SQLite? | The column exists server-side and the server is the sole enforcer of the void window (§3.6). Correctness does not depend on this decision. | Purely a UX question: without a local copy, the app must show the void action on *every* sale and let some attempts fail and roll back (`SYNC-PROTOCOL.md` §4.4). With a local copy it could grey the action out once the shop-day has passed. The second is friendlier for a non-technical operator but adds a field to the sync-pull payload and a local shop-day computation that §4 currently forbids. | Product owner, with `UI-GUIDELINES.md` — needed before the sales-history screen is built. |
 | 2 | How is a `users` row created? | `users` (§3.1) is documented as a table, and `role` (`owner`/`staff`) is used throughout `API-SPEC.md`. | There is no `USER_CREATED`/`USER_UPDATED` event type in `API-SPEC.md` §5, and `API-SPEC.md` §1.1 forbids adding a REST write for business records. So staff accounts currently have no creation path at all. §3.1 notes launch is "one owner account", which defers but does not answer the question. | Product owner — decide whether staff accounts are in v1 scope at all. If yes, `API-SPEC.md` must define the mechanism; if no, the `staff` role should be marked post-launch. |
+| 3 | How does a device undo an **unsynced** `inventory_events` row from a permanently rejected group? (added 1.3) | The table is append-only with no `deleted_at` and no update path (§1.2, §3.5), and accepted events are never rolled back (`SYNC-PROTOCOL.md` §4.1). Both stay true. | A permanently rejected group (`API-SPEC.md` §6.1) committed nothing server-side, but the device already appended its rows locally and sums them for stock (`SYNC-PROTOCOL.md` §3.4). Either §1.2 narrows to server-accepted rows and the device hard-deletes them, or `inventory_events` gains a local-only exclusion column that §1.2 currently forbids. Nothing in these documents chooses. | Architecture owner — **full statement and options in `SYNC-PROTOCOL.md` §11.1**, which owns this decision. §1.2 and §3.5 must be updated in the same change. |

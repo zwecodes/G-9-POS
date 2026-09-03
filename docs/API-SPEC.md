@@ -218,7 +218,7 @@ This closes the "sale exists but stock hasn't moved" window completely, rather t
 
 **New in 1.3.** Versions 1.1 and 1.2 introduced business rules that the server enforces and the device cannot evaluate offline (`CATEGORY_DELETED` blocked by products; `SALE_VOIDED` outside the shop-day; owner-only events submitted under a staff PIN, §1.6). What was missing was the other half of the contract: how the device *learns* the event was refused, and how it distinguishes "refused forever" from "try again later". Without that distinction, a device that had already applied the change locally would either retry forever or drop it silently and stay permanently diverged from the server.
 
-This section defines the **server side** of that contract. The device-side reconciliation — what it reverts and how it tells the owner — is specified in `SYNC-PROTOCOL.md` §4.4 and is not repeated here.
+This section defines the **server side** of that contract. The device-side reconciliation — what it reverts and how it tells the owner — is specified in `SYNC-PROTOCOL.md` §4.4 and is not repeated here. Note that the device side is not fully settled: reverting a local write to the append-only `inventory_events` log is an open decision (`SYNC-PROTOCOL.md` §11.1), which affects three of the four reason codes below. Nothing in *this* section depends on how that is resolved — the server's behaviour and the wire format are unaffected either way.
 
 #### Transient vs permanent
 
@@ -258,7 +258,7 @@ Permanently rejected events are returned in a `rejected[]` array, alongside the 
 | `ROLE_NOT_PERMITTED` | Any owner-only event under a `staff` PIN (§1.6), or any mutating event under a `dashboard_viewer` token (§1.8) | `{ }` | The submitter's role will not change by resending. |
 | `EVENT_VALIDATION_FAILED` | `INVENTORY_ADJUSTED` / `INVENTORY_DAMAGED` missing the required `note` (§5) | `{ "field": "note" }` | The payload is already in the queue as written; resending sends the same invalid payload. |
 
-This list is closed: **a server may only reject an event permanently for a reason listed here.** Any new permanent-rejection rule must add its code to this table in the same change that implements it, so the device always has a defined revert path (`SYNC-PROTOCOL.md` §4.4). Anything else that goes wrong is transient by definition and must be retried, not rejected.
+This list is closed: **a server may only reject an event permanently for a reason listed here.** Any new permanent-rejection rule must add its code to this table in the same change that implements it, so the device always has a defined revert path (`SYNC-PROTOCOL.md` §4.4 — subject to §11.1 for reasons that touch inventory). Anything else that goes wrong is transient by definition and must be retried, not rejected.
 
 ---
 

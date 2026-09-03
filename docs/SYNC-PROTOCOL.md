@@ -1,9 +1,11 @@
 # G9POS Sync Protocol
 
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Draft
 **Last updated:** 2026-09-03
 **Author:** Architecture Team
+
+**Changelog since 1.2:** Audited the §4.4 rejection-reconciliation rule that 1.2 introduced, and split it into the parts that follow from pre-existing rules and the one part that does not. Four steps — queue drop, in-place revert of mutable rows, owner notice, and no compensating event — are shown in §4.4 to be inherited from §1, §2.3, §4.1, §4.2 and `API-SPEC.md` §6, and remain policy. The fifth, undoing an unsynced row in the append-only `inventory_events` log, contradicted `DATA-MODEL.md` §1.2 ("no update path and no delete path") and is now carried as an explicit open decision in the new §11.1 instead of being stated as settled. §4.4's revert table, Scenario G and §10 are marked accordingly: only `CATEGORY_HAS_PRODUCTS` is fully executable today.
 
 **Changelog since 1.1:** Closed the reconciliation gap for permanently rejected events, and cleaned up two naming/mechanism inconsistencies. (1) Added §4.4 (permanent rejection and local revert) — up to 1.1 this document said queue items are dropped on HTTP 409, while `API-SPEC.md` §5 defines two *permanent* business-rule rejections (`CATEGORY_DELETED` with blocking products, `SALE_VOIDED` outside the shop-day). Because the device had already applied both locally, a 409 silently discarded the queue item and left the device permanently diverged from the server with no path back. §2.3 and §9 are updated to match. (2) Renamed the `flutter_secure_storage` keys from `motopos_*` to `g9pos_*` and corrected two "MotoPOS" prose references (§1, §5.2) — leftovers from an earlier product name. (3) Removed `POST /v1/sync/device/activate` from §9: device activation is the `DEVICE_ACTIVATED` queue event already described in §5.3, not a REST endpoint — see `API-SPEC.md` §5.
 
@@ -213,33 +215,44 @@ If two devices submit conflicting updates with identical timestamps (extremely r
 }
 ```
 
-### 4.4 Permanent rejection and local revert (added in 1.2)
+### 4.4 Permanent rejection and local revert (added in 1.2, audited in 1.3)
 
 *The server-side half of this contract — which conditions are permanent and what the response carries — is specified in `API-SPEC.md` §6.1. This section defines only what the device does when it receives one.*
 
 Every write in this system is applied to local SQLite **optimistically**, before the server has seen it (§1, core rule 2). Usually the server agrees. But `API-SPEC.md` defines business rules that the server enforces and the device cannot evaluate offline — a `CATEGORY_DELETED` blocked by products that still reference the category, a `SALE_VOIDED` submitted after the shop-day closed, or an owner-only event submitted while a staff PIN is active (`API-SPEC.md` §1.6). When one of those fires, the device is holding a change the server will never accept.
 
-**The rule:** a permanently rejected event, or group, is removed from the queue and its local write is **reverted** — the affected rows are restored to the last state the server has confirmed. The owner is then told, in plain language, what did not stick.
+**The rule:** a permanently rejected event, or group, is removed from the queue, its local write is **reverted** — the affected rows are restored to the last state the server has confirmed — and the owner is told, in plain language, what did not stick. No compensating event is emitted.
 
-Reverting is correct here, and it does not contradict §4.1's "events are not rolled back":
+#### Where each part of that rule comes from (audited in 1.3)
 
-- §4.1 governs events the server **accepted**. Those are immutable, and a genuine correction is a *new appended event*. That is still true.
-- A permanently rejected group was **never in the server's log at all** — `API-SPEC.md` §6 applies each group in a single transaction, so a rejected group committed nothing. Its rows exist only on this one device, unsynced. Discarding them makes the device *converge* with the server; keeping them would leave it permanently diverged, which is the failure this section exists to prevent.
+This rule was introduced in 1.2 as a single block of policy. Version 1.3 audited it against the event-log, append-only, offline-first and conflict models to establish which parts it *inherits* from rules the system already had, and which parts were new decisions wearing the same clothes. Four of the five steps are inherited and are settled. The fifth — reverting a row that lives in the append-only `inventory_events` log — is not derivable from any existing document, and is carried as an open decision in §11.1 instead of being asserted here.
 
-**Do not emit a compensating event for a rejection.** Nothing was applied server-side, so there is nothing to compensate, and an appended `INVENTORY_ADJUSTED` (or similar) would invent a stock movement that never happened. The revert is a purely local repair of a purely local write.
+| Step | Status | Where it comes from |
+|---|---|---|
+| Remove the event from the queue | **Settled** | §2.3 has always dropped a queue item once the server returned 200 or 409, and `API-SPEC.md` §5 already classified every one of these refusals as `CONFLICT`/409. Each reason in `API-SPEC.md` §6.1 is a deterministic server-side predicate, so a retry evaluates identically forever. |
+| Revert the local write on a **mutable** row | **Settled** | §4.2 already requires the device to discard its own local version when the server refuses it in favour of another. A rejection is that same move with no `winning_payload` to adopt. It is also *forced*: §1 makes the backend the eventual source of truth, and `GET /v1/sync/pull` (§9) returns only changes "this device hasn't originated" — so nothing will ever push corrected state back down for a write this device originated. Without a local revert the divergence is permanent by construction. |
+| Tell the owner | **Settled** | The established pattern for any sync outcome needing owner action: §4.1 flags negative stock "so the device can alert the owner", and §8 surfaces it as a badge. Every rejection in `API-SPEC.md` §6.1 requires owner action (reassign the products, re-enter the adjustment with a note), so it cannot be silent. |
+| Emit no compensating event | **Settled** | `API-SPEC.md` §6 applies each group in one transaction, so a rejected group committed **nothing** server-side. §4.1's "events are not rolled back" governs events the server *accepted* — there, the sale really happened and a correction must be appended. Appending one here would invent a stock movement that never occurred anywhere. |
+| Revert a locally-written row in `inventory_events` | **Open — see §11.1** | `DATA-MODEL.md` §1.2 states that `inventory_events` has no update path and no delete path, and that mistakes are corrected by appending. Deleting the rejected rows contradicts that; excluding them instead needs a marker column that §1.2 equally forbids. No existing document chooses between those, so §11.1 records the choice rather than making it. |
+
+So the shape of the rule is inherited, not invented — but it is only *executable* today for rows outside the event log.
+
+**Do not emit a compensating event for a rejection.** Nothing was applied server-side, so there is nothing to compensate. This holds regardless of how §11.1 is settled.
 
 #### What "revert" means per rejection
 
-There is one row here for every `reason` code in `API-SPEC.md` §6.1, and that must stay true — a reason code with no defined revert is a device that does not know how to recover.
+There is one row here for every `reason` code in `API-SPEC.md` §6.1, and that must stay true — a reason code with no row at all is a device that does not know it needs to recover. Three rows are currently blocked on §11.1; "blocked" means the outcome is known but the mechanism is not yet chosen, which is different from undefined.
 
 | `reason` (`API-SPEC.md` §6.1) | Local write being undone | Revert action |
 |---|---|---|
 | `CATEGORY_HAS_PRODUCTS` | `deleted_at` was set on the category | Clear `deleted_at` — the category reappears. Tell the owner how many products still use it, using the `blocking_product_count` in the response `detail`. |
-| `VOID_WINDOW_CLOSED` | `sales.status` → `voided`, `voided_at` / `voided_by` / `void_reason` set, **and** one `INVENTORY_VOIDED` row appended per line item | Restore `status = completed`, clear the three void columns, and discard the group's locally-written `INVENTORY_VOIDED` rows. The sale stands as completed. |
-| `ROLE_NOT_PERMITTED` | Whatever that event wrote — an owner-only event submitted under a staff PIN, or a mutating event from a `dashboard_viewer` token | Revert that write by the same rule as its event type above, and surface it as a permissions message rather than an error. |
-| `EVENT_VALIDATION_FAILED` | Whatever that event wrote — at present an `INVENTORY_ADJUSTED` / `INVENTORY_DAMAGED` queued without its required `note` | Discard the locally-written `INVENTORY_*` row and restore the previous stock figure. The owner must re-enter the adjustment with a note; the original payload cannot be repaired in the queue. |
+| `VOID_WINDOW_CLOSED` | `sales.status` → `voided`, `voided_at` / `voided_by` / `void_reason` set, **and** one `INVENTORY_VOIDED` row appended per line item | On `sales`: restore `status = completed` and clear the three void columns — the sale stands as completed. On the `INVENTORY_VOIDED` rows: **blocked on §11.1.** |
+| `ROLE_NOT_PERMITTED` | Whatever that event wrote — an owner-only event submitted under a staff PIN, or a mutating event from a `dashboard_viewer` token | Revert that write by the same rule as its event type above, and surface it as a permissions message rather than an error. Blocked on §11.1 only where that event wrote to `inventory_events`. |
+| `EVENT_VALIDATION_FAILED` | Whatever that event wrote — at present an `INVENTORY_ADJUSTED` / `INVENTORY_DAMAGED` queued without its required `note` | The owner must re-enter the adjustment with a note; the original payload cannot be repaired in the queue. Undoing the locally-written `INVENTORY_*` row is **blocked on §11.1.** |
 
-After discarding locally-written `INVENTORY_*` rows, the device recomputes its cached `computed_stock` for the affected products the same way it does after any sync (§3.4) — no special path.
+Only `CATEGORY_HAS_PRODUCTS` is fully executable today. The other three each touch `inventory_events` and therefore cannot be implemented until §11.1 is settled — this is the one place where the reconciliation contract is genuinely incomplete rather than merely unwritten.
+
+Once §11.1 is settled, the device recomputes its cached `computed_stock` for the affected products the same way it does after any sync (§3.4) — no special path.
 
 #### Constraints on the revert
 
@@ -403,10 +416,11 @@ flutter_secure_storage keys:
 3. The UI confirms immediately. Stock appears to go back up. The group sits in the queue.
 4. Wednesday, connectivity returns and the flusher sends the group.
 5. The server evaluates `SALE_VOIDED` against `sales.server_received_at` in `SHOP_TIMEZONE`: the sale was received Monday, so the void window closed. It rejects the **whole group** in one transaction — the sale stays `completed` and no `INVENTORY_VOIDED` rows are written server-side. The response returns the group in `rejected[]` with `reason: VOID_WINDOW_CLOSED` (§9).
-6. The device removes the group from the queue — retrying would fail identically forever — and reverts per §4.4: `status` back to `completed`, void columns cleared, the locally-written `INVENTORY_VOIDED` rows discarded, cached stock recomputed.
-7. The owner sees a plain-language notice that the sale could not be cancelled. The tablet and the server now agree.
+6. The device removes the group from the queue — retrying would fail identically forever — and reverts per §4.4: `status` back to `completed` and the void columns cleared.
+7. The owner sees a plain-language notice that the sale could not be cancelled.
+8. **The tablet does not fully agree with the server yet.** The locally-written `INVENTORY_VOIDED` rows are still in the device's event log, so its cached stock still reads high by the voided quantity. Undoing them is the open decision in §11.1; this scenario cannot be closed end-to-end until that is settled.
 
-Without §4.4, step 6 would have dropped the queue item and left the tablet permanently showing a voided sale and inflated stock that no other device and no report would ever agree with.
+Without §4.4, step 6 would have dropped the queue item and left the tablet permanently showing a voided sale *and* inflated stock that no other device and no report would ever agree with. §4.4 as it stands fixes the sale row; §11.1 is what remains to fix the stock.
 
 ---
 
@@ -522,7 +536,30 @@ Response: all server-side changes since `last_sync_at` that this device hasn't o
 | Batch size limit for `/v1/sync/events` | 50 events per request, 5MB max payload. Server returns `413 Payload Too Large` if exceeded. Queue flusher sends multiple sequential batches if queue exceeds 50 items, respecting event-group boundaries per §2.5 (added in 1.1) |
 | Event-group batching | Added in 1.1 — see §2.5. Groups (by `reference_id`) are never split across batches or retried partially |
 | Lost/stolen device | Owner can remotely revoke via `API-SPEC.md` §3.4, invalidating the refresh token before natural 30-day expiry (added in 1.1) |
-| Permanently rejected events | Device reverts its local optimistic write and notifies the owner; the event is dropped from the queue, never retried, and **no compensating event is emitted** — see §4.4 (added in 1.2) |
+| Permanently rejected events | Dropped from the queue, never retried, **no compensating event emitted**, owner always notified, and the local write reverted — see §4.4. Audited in 1.3: all four of those follow from rules the system already had. Reverting rows in `inventory_events` specifically is **not** settled — §11.1 (added in 1.2, scoped in 1.3) |
 | `reference_id` on standalone events | Always NULL. It is a causal-group key only, never the entity's own `id` — see §2.5 (added in 1.2) |
 | Device activation mechanism | `DEVICE_ACTIVATED` queue event only. No REST endpoint — failover must work with no internet (§5.3) (added in 1.2) |
 | Secure-storage key prefix | `g9pos_*`. No migration required — no shipped build exists (§6.4) (added in 1.2) |
+
+---
+
+## 11. Open Decisions (added in 1.3)
+
+### 11.1 How does a device undo an unsynced `inventory_events` row?
+
+**This blocks §4.4 for three of its four rejection reasons, and it is a real architectural decision — not a documentation gap.** It is recorded here rather than resolved because the existing documents genuinely do not choose, and choosing would set a new rule about the mutability of the local event log.
+
+**What is already settled.** Everything else in §4.4: the queue drop, the owner notice, the absence of a compensating event, and the in-place revert of mutable rows such as `sales` and `categories`. Those follow from §2.3, §4.1, §4.2, §1 and `API-SPEC.md` §6, as audited in §4.4.
+
+**What is undecided.** When the server permanently rejects a group that wrote to `inventory_events` — a rejected `SALE_VOIDED` has already appended one `INVENTORY_VOIDED` row per line item — those rows exist only on that device and were never accepted anywhere. But `DATA-MODEL.md` §1.2 declares `inventory_events` append-only with *no update path and no delete path*, and its design principles say append-only tables "have no delete path at all". So the device is holding rows it must stop counting, in the one table it is forbidden to change. Stock is computed by summing that log (§3.4), so leaving them means the device's stock stays wrong indefinitely.
+
+Two mechanisms are available and the documentation does not favour either:
+
+| Option | Mechanism | Cost |
+|---|---|---|
+| **A — narrow the append-only rule** | Hard-delete the rejected rows locally, and restate `DATA-MODEL.md` §1.2 as governing rows the server has *accepted*, with unsynced rejected rows an explicit carve-out. | Weakens the strongest invariant in the data model. Requires care that the carve-out cannot be reached for any row with `synced_at` set, or the event log becomes editable in practice. |
+| **B — mark and exclude** | Add a local-only column to `inventory_events` (SQLite only) and exclude marked rows from the §3.4 sum. | Adds a soft-delete-shaped column to the table `DATA-MODEL.md` §1.2 specifically says must not have one, and makes the SQLite and PostgreSQL definitions of the log diverge (§4). |
+
+**Who decides:** architecture owner, before the sync flusher's rejection handler is implemented. Whichever is chosen, `DATA-MODEL.md` §1.2 and §3.5 must be updated in the same change — the current text is incompatible with both options as written.
+
+**Note on scope:** this is *only* about unsynced rows from a permanently rejected group. It is not a request to make the event log editable, and it does not touch §4.1: accepted events remain immutable and corrections to them are still appended, never reverted.

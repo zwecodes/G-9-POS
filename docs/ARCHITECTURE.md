@@ -292,7 +292,7 @@ Staff log in with a 4-digit PIN on the device after the owner has authenticated 
 | Offline operation | Full functionality from local SQLite indefinitely |
 | Conflict on stock | Applied as-is, negative stock flagged, owner alerted |
 | Conflict on LWW | Later timestamp wins, server notifies losing device |
-| Permanent rejection | Server returns the event in `rejected[]`; device reverts its local optimistic write and tells the owner — never retried, no compensating event (`API-SPEC.md` §6.1, `SYNC-PROTOCOL.md` §4.4) |
+| Permanent rejection | Server returns the event in `rejected[]`; device reverts its local optimistic write and tells the owner — never retried, no compensating event (`API-SPEC.md` §6.1, `SYNC-PROTOCOL.md` §4.4). Reverting rows in the append-only inventory log is an open decision (`SYNC-PROTOCOL.md` §11.1) |
 | Clock skew | Server uses `server_received_at` as tiebreaker if delta < 5s |
 | Idempotency | Every event has a UUID — server ignores duplicates |
 | Failover | Phone pre-authenticated, background synced, one-tap activation via the `DEVICE_ACTIVATED` queue event — no connectivity required |
