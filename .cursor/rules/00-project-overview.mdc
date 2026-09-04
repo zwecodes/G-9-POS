@@ -1,0 +1,42 @@
+---
+description: G9POS project identity, constraints, and non-negotiable rules. Always applied.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# G9POS — Project Overview
+
+## What This Is
+G9POS is a production offline-first POS and inventory management system for a small motorcycle accessories shop in Pin Laung, Myanmar. It is not a tutorial, demo, or exercise. Every line of code runs in a real shop operated by a non-technical owner who cannot call for help.
+
+## Repository
+`github.com/zwecodes/G-9-POS`
+
+## Stack
+- **Mobile app:** Flutter (Riverpod, GoRouter, Drift/SQLite) — Android tablet + phone
+- **Admin dashboard:** Flutter Web — iPhone, laptop, browser (read-only monitoring)
+- **Backend:** Go (Gin, PostgreSQL, JWT, WebSocket)
+- **Infrastructure:** Docker, Nginx, DigitalOcean/Hetzner
+
+## The 8 Non-Negotiable Rules
+
+These are checked on every change. Violation = reject and redo.
+
+1. **All writes go through `POST /v1/sync/events` only.** No direct REST write endpoints for products, sales, void, expenses, suppliers, or orders. Ever.
+2. **Never hard-delete.** Every delete is a soft delete via `deleted_at`. Never `DELETE FROM`.
+3. **Never store raw stock numbers.** Stock is always `SUM(quantity_delta)` from `inventory_events`. Never cache it in a column.
+4. **Never hardcode colors, font sizes, or spacing.** Always `AppColors.*`, `AppTextStyles.*`, `AppSpacing.*`.
+5. **Never block a sale.** No hardware call, network call, or validation can prevent a sale from completing.
+6. **Never show a raw exception to the user.** Every error is caught, logged, shown as plain language.
+7. **`SHOP_TIMEZONE = Asia/Yangon (UTC+6:30)`** governs all date/day logic. Never use device-local time for business logic.
+8. **Event groups are never split across sync batches.** Group by `reference_id` — a sale and its inventory events commit together or not at all.
+
+## Real-World Constraints
+- Power is unreliable — app must work on battery with no electricity
+- Internet is unreliable — every core operation must work offline indefinitely
+- The operator is non-technical — UI must be self-evident, errors must be plain language
+- The builder is remote (Thailand) — first-run setup must work without developer presence
+- ~500 products — CSV bulk import is a launch requirement, not optional
+
+## What to Do When Unsure
+Ask before adding any field, endpoint, or feature not covered in the docs. Do not invent. Do not assume. Reference the relevant doc and ask.

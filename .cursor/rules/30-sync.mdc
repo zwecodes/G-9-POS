@@ -1,0 +1,144 @@
+---
+description: Sync queue, event processing, conflict resolution, and rejection handling. Applied to sync-related code.
+globs: ["apps/mobile/lib/core/sync/**/*", "services/backend/internal/sync/**/*"]
+alwaysApply: false
+---
+
+# G9POS — Sync Protocol Rules
+
+## The One Rule
+The POS must always work. Sync is a background concern, never a dependency.
+
+## Event Types
+```
+PRODUCT_CREATED       PRODUCT_UPDATED        PRODUCT_DELETED
+CATEGORY_CREATED      CATEGORY_UPDATED       CATEGORY_DELETED
+INVENTORY_SOLD        INVENTORY_VOIDED       INVENTORY_RESTOCKED
+INVENTORY_ADJUSTED    INVENTORY_DAMAGED      INVENTORY_RETURNED
+SALE_CREATED          EXPENSE_CREATED        EXPENSE_UPDATED
+EXPENSE_DELETED       SUPPLIER_ORDER_RECEIVED
+DEVICE_ACTIVATED
+```
+
+## Sync Queue (SQLite)
+Every write appends to `sync_queue` before returning to the UI:
+```dart
+await _db.syncQueueDao.enqueue(
+  id: eventId,           // same UUID as the entity being created/modified
+  eventType: 'PRODUCT_UPDATED',
+  payload: jsonEncode(payload),
+  deviceId: deviceId,
+  referenceId: referenceId, // groups related events — nullable for standalone
+  createdAt: DateTime.now().millisecondsSinceEpoch,
+);
+```
+
+## Event Group Batching — Critical
+Events with the same `reference_id` form a group. Groups are NEVER split across batches.
+
+```dart
+// ✅ Correct flusher batching
+List<List<SyncQueueItem>> buildBatches(List<SyncQueueItem> queue) {
+  final batches = <List<SyncQueueItem>>[];
+  var current = <SyncQueueItem>[];
+
+  for (final item in queue) {
+    final group = queue.where((e) => e.referenceId == item.referenceId).toList();
+    if (current.length + group.length > 50) {
+      batches.add(current);
+      current = [...group];
+    } else {
+      current.addAll(group);
+    }
+  }
+  if (current.isNotEmpty) batches.add(current);
+  return batches;
+}
+```
+
+Standalone events (`referenceId == null`) are treated as single-item groups.
+
+## Server-Side Atomicity
+Each event group is applied in a single PostgreSQL transaction:
+```go
+// All events in a group commit together or not at all
+tx, _ := db.BeginTx(ctx, nil)
+for _, event := range group {
+    if err := applyEvent(tx, event); err != nil {
+        tx.Rollback()
+        return rejectGroup(group, err)
+    }
+}
+tx.Commit()
+// Only after commit: fire WebSocket update
+hub.Broadcast(groupResult)
+```
+
+## Conflict Resolution
+- **Inventory events:** no conflict possible — append-only log, both sides applied
+- **Everything else:** Last-Write-Wins by `created_at`, server is tiebreaker
+- **Clock skew:** if delta < 5s, server uses `server_received_at` as tiebreaker
+
+## Rejection Handling (G1)
+When server rejects an event group (`rejected[]` in sync response):
+
+```dart
+Future<void> handleRejection(RejectedGroup rejection) async {
+  await _db.transaction(() async {
+    // 1. Mark inventory events as rejected
+    for (final eventId in rejection.eventIds) {
+      await _inventoryEventDao.markRejected(eventId); // sets rejected_at, validates synced_at IS NULL
+    }
+
+    // 2. Revert mutable rows (sale status, product fields, etc.)
+    await _revertMutableRows(rejection);
+
+    // 3. Drop the queue item(s) — terminal, never retry
+    await _syncQueueDao.deleteGroup(rejection.referenceId);
+
+    // 4. Recompute cached stock for affected products
+    await _inventoryEventDao.recomputeStock(rejection.affectedProductIds);
+
+    // 5. Record deferred owner notice (shown on sync status screen, never modal)
+    await _noticeDao.insert(
+      message: _buildRejectionMessage(rejection),
+      saleId: rejection.referenceId,
+    );
+  });
+}
+```
+
+**Two addressing modes for rejection marking:**
+- Grouped event (has `reference_id`): mark all rows WHERE `reference_id = X AND synced_at IS NULL`
+- Standalone event (null `reference_id`): mark by event `id` WHERE `id = X AND synced_at IS NULL`
+
+## Rejection Notice — UI Rules
+- Plain language, names the sale: "Sale S-00142 could not be cancelled. The shop day had ended."
+- Lives on the sync status screen only
+- Never a popup, modal, or blocking dialog
+- Never interrupts an active sale
+
+## Void Rejection (§11.2 / Design 1)
+When `VOID_WINDOW_CLOSED` is returned:
+1. Restore `sales.status = completed`, clear `voided_at / voided_by / void_reason`
+2. Set `rejected_at` on the `INVENTORY_VOIDED` rows
+3. Drop queue group
+4. Recompute stock
+5. Show deferred notice on sync status screen
+
+The `CANCELLED` badge in sales history is derived from `sales.status = voided`. After revert it disappears automatically — no separate flag needed.
+
+## Idempotency
+Every event has a UUID `id`. Server checks before inserting:
+- Duplicate: return `200 OK` with existing result, ignore payload
+- Safe to retry any event any number of times
+
+## Retry Schedule
+| Attempt | Delay |
+|---------|-------|
+| 1st | immediate |
+| 2nd | 5 seconds |
+| 3rd | 30 seconds |
+| 4th+ | 5 minutes |
+
+Terminal outcomes (acceptance, rejection, conflict resolved): drop from queue, never retry.

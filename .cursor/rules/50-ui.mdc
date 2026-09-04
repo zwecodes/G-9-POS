@@ -1,0 +1,164 @@
+---
+description: Flutter UI rules, design tokens, layout patterns, and component conventions. Applied to all Flutter screen and widget files.
+globs: ["apps/mobile/lib/features/**/*", "apps/mobile/lib/shared/**/*", "apps/admin/**/*"]
+alwaysApply: false
+---
+
+# G9POS — UI / UX Rules
+
+## The One Rule
+The shop owner must be able to complete a sale in under 10 seconds without reading anything.
+
+## Primary User
+A non-technical shop owner operating alone. She is serving customers and handling cash simultaneously. She cannot afford to be confused by the app for even 5 seconds. Design for her first, always.
+
+## Design Tokens — Always Use These
+
+```dart
+// Colors — never hardcode hex inline
+AppColors.primary          // #1B4FFF — main actions
+AppColors.success          // #16A34A — complete, in stock
+AppColors.warning          // #F59E0B — low stock, stale sync
+AppColors.error            // #DC2626 — void, delete, negative stock
+AppColors.textPrimary      // #111111
+AppColors.textSecondary    // #666666
+AppColors.surface          // #FFFFFF
+AppColors.background       // #F5F5F5
+
+// Spacing — always AppSpacing.*
+AppSpacing.xs   // 4px
+AppSpacing.sm   // 8px
+AppSpacing.md   // 16px
+AppSpacing.lg   // 24px
+AppSpacing.xl   // 32px
+
+// Text — always AppTextStyles.*
+AppTextStyles.saleTotal      // 40px, w800 — checkout total
+AppTextStyles.cartItemName   // 16px, w600
+AppTextStyles.body           // 15px, w400
+AppTextStyles.caption        // 12px, w400
+AppTextStyles.buttonPrimary  // 17px, w700, white
+```
+
+## Touch Targets — No Exceptions
+Minimum tap target: **48×48px**. Use padding to enforce this on small icons.
+```dart
+// ✅ Correct
+IconButton(
+  iconSize: 24,
+  padding: EdgeInsets.all(AppSpacing.md), // total = 56px
+  onPressed: onPressed,
+  icon: Icon(Icons.remove),
+)
+// ❌ Wrong
+GestureDetector(onTap: onTap, child: Icon(Icons.remove, size: 16))
+```
+
+Key action buttons (Complete Sale, Confirm Void, Save): minimum height 56px.
+
+## Navigation — Bottom Bar Only
+```dart
+// 4 tabs, always visible
+// [🛒 POS] [📦 Products] [📊 Reports] [⚙️ Settings]
+```
+No drawer. No hamburger menu. No nested navigation more than 1 level deep.
+
+## Layout — Tablet vs Phone
+```dart
+// Breakpoint: 600px
+LayoutBuilder(builder: (context, constraints) {
+  if (constraints.maxWidth >= 600) {
+    return TabletLayout(); // split: products left 60%, cart right 40%
+  }
+  return PhoneLayout(); // product grid full width, cart as bottom sheet
+})
+```
+
+## POS Sale Screen Rules
+- Total is always visible — never below the fold
+- "COMPLETE SALE" button: full width of cart panel, 64px tall, `AppColors.primary`
+- Cart item row: name left, (− N +) center, price right
+- Search bar always visible at top — not hidden behind a tap
+- No settings, reports, or unrelated items on this screen
+
+## Sync Status Indicator
+Shown in app header on every screen — never blocking:
+```
+🟢 = synced < 2h ago (icon only)
+🟡 = 2–4h ago (icon only)
+🟠 = 4–24h ago (icon + time text)
+🔴 = >24h ago (icon + time text, tappable → sync screen)
+```
+
+## Offline Banner
+```dart
+// Slim banner below header when no connectivity — amber, 36px tall
+// "⚡ Offline — sales are saving locally"
+// Disappears automatically when connectivity returns
+// Never blocks any action
+```
+
+## Error Messages
+```dart
+// ✅ Correct — plain language, inline under field
+Text('Could not save product. Try again.', style: AppTextStyles.caption.copyWith(color: AppColors.error))
+
+// ❌ Wrong — never SnackBar for errors
+ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+
+// ❌ Wrong — never expose raw exceptions
+Text(exception.toString())
+```
+
+## Confirmation Dialogs
+Required for: void sale, delete product, sign out, mark order received.
+Not required for: add to cart, remove from cart, complete sale, save product.
+
+Dialog rules:
+- Maximum 2 buttons
+- Destructive action: right side, `AppColors.error`
+- Cancel: left side, grey
+- Title: plain language ("Cancel this sale?")
+- Body: honest — never promise what cannot be guaranteed
+
+**Void confirmation body (§11.2 — Design 1):**
+```
+"If the shop still allows cancelling this sale today, stock will be put back. 
+If not, the sale will stay completed."
+```
+Never say "This cannot be undone." Never promise stock will definitely be returned.
+
+## Currency Formatting
+```dart
+// Always use CurrencyFormatter — never format inline
+CurrencyFormatter.format(13000)    // → "13,000 MMK"
+CurrencyFormatter.formatCompact(13000) // → "13,000"
+
+// ❌ Wrong
+Text('${amount} MMK')
+```
+
+## Date / Timezone
+```dart
+// Always ShopDateUtils — never DateTime.now() in business logic
+ShopDateUtils.nowInShop()
+ShopDateUtils.isSameShopDay(a, b)
+```
+
+## Loading States
+- First app launch: full-screen spinner (only this case)
+- Lists and grids: shimmer skeleton matching real item shape
+- Individual actions: inline spinner
+- Never block the entire UI for a background operation
+
+## What Cursor Must Never Do in UI Code
+- ❌ `SnackBar` for errors
+- ❌ `showDialog` for non-destructive feedback
+- ❌ Hardcode any color, font size, or spacing value
+- ❌ Show raw exception or stack trace to user
+- ❌ Block a sale action with a loading spinner
+- ❌ Use red for anything except destructive actions and errors
+- ❌ Use a drawer or hamburger menu
+- ❌ Use a bottom sheet for the main cart on tablet
+- ❌ Require more than 3 taps for any common daily action
+- ❌ Import `package:drift` directly in a widget or screen file

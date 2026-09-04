@@ -1,0 +1,130 @@
+---
+description: Database schema rules for both SQLite (Drift) and PostgreSQL. Applied to all database, migration, and DAO files.
+globs: ["apps/mobile/lib/core/database/**/*", "services/backend/pkg/db/**/*", "services/backend/internal/**/repository.go"]
+alwaysApply: false
+---
+
+# G9POS — Data Model Rules
+
+## ID Convention
+All IDs are UUIDs generated on the device. Never use auto-increment integers.
+```dart
+// Flutter — generate on device
+import 'package:uuid/uuid.dart';
+final id = const Uuid().v4();
+```
+```go
+// Go — use google/uuid
+import "github.com/google/uuid"
+id := uuid.New().String()
+```
+
+## Every Sync Table Has These Columns
+```
+id          TEXT/UUID     Primary key — UUID, device-generated
+created_at  INTEGER/TIMESTAMPTZ  Unix ms (SQLite) / TIMESTAMPTZ (PostgreSQL)
+updated_at  INTEGER/TIMESTAMPTZ
+deleted_at  INTEGER/TIMESTAMPTZ  NULL = active, non-null = soft deleted
+device_id   TEXT/UUID     Device that last modified this record
+```
+Exception: `inventory_events` — append-only, has no `updated_at` or `deleted_at`.
+
+## Soft Delete — Always
+```dart
+// ✅ Correct — soft delete
+Future<void> softDelete(String id) =>
+  (update(table)..where((t) => t.id.equals(id)))
+    .write(TableCompanion(
+      deletedAt: Value(DateTime.now().millisecondsSinceEpoch)
+    ));
+
+// ❌ Wrong — never hard delete
+await (delete(table)..where((t) => t.id.equals(id))).go();
+```
+
+Always filter soft-deleted records in every read query:
+```dart
+// ✅ Always include this filter
+..where((t) => t.deletedAt.isNull())
+```
+
+## Inventory Events — Append Only
+`inventory_events` is the most important table. Rules:
+- **Never UPDATE or DELETE rows in this table**
+- **Never store computed stock** — always `SUM(quantity_delta)`
+- `quantity_delta` is signed: negative = stock out, positive = stock in
+- Every row has a `reference_id` linking it to its parent (sale, order) — except standalone events
+
+**Standalone events** (`INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, `INVENTORY_RETURNED`) have `reference_id = NULL` — they have no parent entity.
+
+**Local stock query (SQLite) — must exclude rejected events:**
+```dart
+// ✅ Correct — excludes rejected
+final stock = await (selectOnly(inventoryEvents)
+  ..addColumns([inventoryEvents.quantityDelta.sum()])
+  ..where(inventoryEvents.productId.equals(productId))
+  ..where(inventoryEvents.rejectedAt.isNull()))  // ← required
+  .getSingle();
+```
+
+**Server stock query (PostgreSQL) — unchanged, no rejected_at:**
+```sql
+SELECT SUM(quantity_delta) FROM inventory_events WHERE product_id = $1;
+```
+
+## G1 — rejected_at Column (SQLite only)
+`inventory_events` has a SQLite-only column `rejected_at INTEGER NULL`.
+
+**Invariant:** `rejected_at IS NOT NULL → synced_at IS NULL`
+- Only set on rows the server never saw
+- Never sent to server, never replicated
+- Enforced in repository layer AND as a SQLite CHECK constraint
+
+```dart
+// ✅ Marking rejection — enforce invariant
+Future<void> markRejected(String eventId) async {
+  final event = await getById(eventId);
+  if (event.syncedAt != null) {
+    throw StateError('Cannot reject a synced event: $eventId');
+  }
+  await (update(inventoryEvents)..where((e) => e.id.equals(eventId)))
+    .write(InventoryEventsCompanion(
+      rejectedAt: Value(DateTime.now().millisecondsSinceEpoch)
+    ));
+}
+```
+
+## SQLite vs PostgreSQL Differences
+| Concern | SQLite (Drift) | PostgreSQL |
+|---------|---------------|------------|
+| Timestamps | INTEGER (Unix ms) | TIMESTAMPTZ |
+| Booleans | INTEGER (0/1) | BOOLEAN |
+| UUIDs | TEXT | UUID native |
+| Extra columns | `synced_at`, `rejected_at` (inventory_events only) | `server_received_at` |
+| sync_queue | Present | Not present |
+| devices table | Not present | Present |
+
+## Price and Currency
+All prices stored as integers (Myanmar Kyat, no decimals):
+```dart
+// ✅ Correct
+final priceMmk = 13000; // integer
+
+// ❌ Wrong
+final price = 130.00; // no decimals in MMK
+```
+
+## Timestamps
+All timestamps are Unix milliseconds in SQLite:
+```dart
+// ✅ Correct
+final now = DateTime.now().millisecondsSinceEpoch; // int
+
+// ❌ Wrong — never store DateTime objects in Drift
+```
+
+## Migrations
+- Never modify an existing migration file
+- Every `up` migration has a `down` migration
+- Format: `{sequence}_{description}.{direction}.sql`
+- Migrations run automatically on server startup

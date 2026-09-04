@@ -1,0 +1,66 @@
+---
+description: System architecture, device roles, and infrastructure decisions. Applied to backend, infrastructure, and sync code.
+globs: ["services/**/*", "infrastructure/**/*", "apps/mobile/lib/core/sync/**/*", "apps/mobile/lib/core/auth/**/*"]
+alwaysApply: false
+---
+
+# G9POS — Architecture Rules
+
+## Device Roles
+| Device | Role |
+|--------|------|
+| Android tablet | Primary POS — only active POS at a time |
+| Android phone | Hot standby — pre-authenticated, background synced, one-tap activation |
+| iPhone/laptop/browser | Remote dashboard — read-only monitoring + staff creation + device revocation |
+
+Only one device is the active POS at any time (`devices.is_active_pos`). Switching is a deliberate owner action, never automatic.
+
+## Write Path — Only One
+```
+User action
+  → Write to local SQLite (Drift)
+  → Append to sync_queue
+  → Return success to UI immediately
+  → Background: flush queue to POST /v1/sync/events
+```
+There is no other write path. No direct REST writes. No synchronous server calls in the sale flow.
+
+## Sync Architecture
+- **Inventory changes:** append-only event log — `INVENTORY_SOLD`, `INVENTORY_VOIDED`, `INVENTORY_RESTOCKED`, `INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, `INVENTORY_RETURNED`
+- **Everything else:** Last-Write-Wins by `created_at` timestamp, server is tiebreaker
+- **Transport:** HTTP REST — sync queue flushed when connectivity detected
+- **Real-time push:** WebSocket for dashboard only — never load-bearing for POS
+- **Batch size:** 50 events per request, 5MB max payload
+- **Event groups:** never split across batches — group by `reference_id`
+- **Idempotency:** every event has a UUID id — server ignores duplicates
+
+## Offline Operation
+- Full POS functionality from local SQLite indefinitely — no internet required
+- JWT cached in `flutter_secure_storage` — login works offline after first auth
+- Background sync every 2 hours when connectivity available
+- Staleness warnings at 4h / 24h — never block a sale
+
+## Device Failover (Tablet → Phone)
+- Phone is always pre-authenticated and background-synced
+- "Set as active device" is one tap — no reconfiguration
+- Both devices paired to all hardware during initial setup
+- `DEVICE_ACTIVATED` event queued and sent when connectivity returns
+
+## Backend Structure
+Handler → Service → Repository (three layers, always)
+- Handler: parse request, call service, return response — no business logic
+- Service: business logic, validation — no HTTP, no SQL
+- Repository: SQL only — no business logic, no HTTP
+
+## Infrastructure
+- Single Go monolith — no microservices
+- Docker Compose: nginx + go-api + postgresql
+- PostgreSQL not exposed publicly — only Go API is internet-facing
+- `POST /v1/setup` must be completed before API is exposed to public internet
+- Daily automated backups
+
+## Shop Timezone
+```go
+const ShopTimezone = "Asia/Yangon" // UTC+6:30 — never change, never use device local time
+```
+All "same day" logic (especially sale void) uses server shop-day, not device clock.

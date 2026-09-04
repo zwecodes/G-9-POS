@@ -1,0 +1,131 @@
+---
+description: REST and WebSocket API contract, auth rules, and endpoint conventions. Applied to backend handler and route files.
+globs: ["services/backend/internal/**/*.go", "services/backend/cmd/**/*.go"]
+alwaysApply: false
+---
+
+# G9POS — API Rules
+
+## The Only Write Endpoint
+```
+POST /v1/sync/events
+```
+This is the only endpoint that writes shop data. No exceptions.
+
+The following do NOT exist and must never be created:
+- `POST /v1/products`
+- `POST /v1/sales`
+- `POST /v1/sales/{id}/void`
+- `POST /v1/expenses`
+- `POST /v1/suppliers`
+- `POST /v1/orders`
+- `PUT` or `PATCH` on any shop-data resource
+
+## Unauthenticated Endpoints (only two)
+```
+POST /v1/auth/login    — username + password → JWT pair
+POST /v1/setup         — first-owner bootstrap, empty-users only, deploy-time only
+```
+All other endpoints require a valid JWT. No exceptions.
+
+## Setup Endpoint Rules
+- Only callable when `users` table has zero rows
+- Empty-table check and insert are atomic (single transaction or unique constraint)
+- Must be completed before API is exposed to the public internet
+- Rate limited: 5 req/min/IP
+- Returns `409 SETUP_ALREADY_COMPLETE` if users already exist
+
+## Auth Model
+```
+Owner:            username + password → JWT (role: owner)
+Staff:            PIN unlock on device — not a server login factor
+dashboard_viewer: separate JWT claim for remote admin/viewer access
+```
+PIN hashes are stored server-side and distributed via pull — but PIN is never a server login factor. `POST /v1/auth/login` always requires username + password.
+
+## JWT
+- Access token: 15 minutes
+- Refresh token: 30 days
+- Cached in `flutter_secure_storage` on device
+- Offline grace: expired access token with valid refresh token → load app, queue refresh
+- Device revocation: `POST /v1/devices/{id}/revoke` — sets `devices.revoked_at`
+
+## Standard Response Format
+```go
+type APIResponse struct {
+    Success bool        `json:"success"`
+    Data    interface{} `json:"data,omitempty"`
+    Error   string      `json:"error,omitempty"`
+}
+```
+Always use `response.OK()`, `response.BadRequest()`, `response.Unauthorized()`, `response.InternalError()` — never `c.JSON()` directly.
+
+## Handler Pattern
+```go
+// Handler: parse → call service → respond. No business logic.
+func (h *Handler) GetProducts(c *gin.Context) {
+    products, err := h.service.GetAllProducts(c.Request.Context())
+    if err != nil {
+        slog.Error("get products failed", "error", err)
+        response.InternalError(c, "Could not load products")
+        return
+    }
+    response.OK(c, products)
+}
+```
+Never query the database from a handler. Never put business logic in a handler.
+
+## Sync Events Endpoint
+```
+POST /v1/sync/events
+Body: { device_id, events: [...] }
+Response: { accepted: [...], rejected: [...], conflicts: [...], stock_corrections: [...] }
+```
+Each event group is applied atomically. WebSocket broadcast fires only after transaction commits.
+
+## GET Endpoints (reads only)
+```
+GET /v1/products          — all active products
+GET /v1/sync/pull         — changes since last_sync_at
+GET /v1/reports/daily     — daily summary
+GET /v1/reports/range     — date range report
+GET /v1/sales             — sales history
+GET /v1/devices           — device list
+```
+
+## Dashboard-Only Admin Endpoints
+```
+POST /v1/users            — create staff account (owner JWT or dashboard_viewer)
+POST /v1/devices/{id}/revoke — revoke device access
+```
+These are the only two write endpoints that are not `POST /v1/sync/events`. They are administrative, not shop-data writes.
+
+## WebSocket
+- Dashboard clients only — never POS app
+- Path: `/ws/dashboard`
+- Pushes: `sale.created`, `stock.updated`, `device.status`
+- If WebSocket drops: dashboard falls back to polling `GET /v1/sync/pull` every 30s
+- Never load-bearing for POS operation
+
+## Error Response Rules
+- Never expose raw Go errors to the client
+- Never expose stack traces
+- Error message is plain language, one sentence
+- Internal errors logged with full context server-side
+```go
+// ✅ Correct
+slog.Error("sync event failed", "event_id", event.ID, "error", err)
+response.InternalError(c, "Could not process sync events")
+
+// ❌ Wrong
+c.JSON(500, gin.H{"error": err.Error()})
+```
+
+## Shop Timezone in API
+```go
+// All same-day checks use shop timezone
+if !timezone.IsSameShopDay(sale.ServerReceivedAt, time.Now()) {
+    return ErrVoidWindowClosed
+}
+// Never: sale.CreatedAt.Day() != time.Now().Day()
+```
