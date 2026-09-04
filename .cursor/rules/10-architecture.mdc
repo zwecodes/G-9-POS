@@ -11,11 +11,11 @@ alwaysApply: false
 |--------|------|
 | Android tablet | Primary POS — only active POS at a time |
 | Android phone | Hot standby — pre-authenticated, background synced, one-tap activation |
-| iPhone/laptop/browser | Remote dashboard — read-only monitoring + staff creation + device revocation |
+| iPhone/laptop/browser | Remote dashboard — monitoring + staff create + device revoke + CSV catalog import |
 
 Only one device is the active POS at any time (`devices.is_active_pos`). Switching is a deliberate owner action, never automatic.
 
-## Write Path — Only One
+## Write Path — Shop Data
 ```
 User action
   → Write to local SQLite (Drift)
@@ -23,7 +23,9 @@ User action
   → Return success to UI immediately
   → Background: flush queue to POST /v1/sync/events
 ```
-There is no other write path. No direct REST writes. No synchronous server calls in the sale flow.
+No direct REST product/sale/expense/order writes. No synchronous server calls in the sale flow.
+
+Administrative REST (not POS shop-data CRUD): `POST /v1/setup`, `POST /v1/users`, `POST /v1/devices/{id}/revoke`, `POST /v1/catalog/import`, auth, device rename.
 
 ## Sync Architecture
 - **Inventory changes:** append-only event log — `INVENTORY_SOLD`, `INVENTORY_VOIDED`, `INVENTORY_RESTOCKED`, `INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, `INVENTORY_RETURNED`
@@ -31,8 +33,9 @@ There is no other write path. No direct REST writes. No synchronous server calls
 - **Transport:** HTTP REST — sync queue flushed when connectivity detected
 - **Real-time push:** WebSocket for dashboard only — never load-bearing for POS
 - **Batch size:** 50 events per request, 5MB max payload
-- **Event groups:** never split across batches — group by `reference_id`
+- **Event groups:** never split across batches — group by `reference_id`; standalone events are NULL
 - **Idempotency:** every event has a UUID id — server ignores duplicates
+- **G1:** device sets local `rejected_at` on permanently rejected unsynced `inventory_events` rows; never hard-delete; marker never leaves the device
 
 ## Offline Operation
 - Full POS functionality from local SQLite indefinitely — no internet required

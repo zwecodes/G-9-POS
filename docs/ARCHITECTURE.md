@@ -1,9 +1,13 @@
 # G9POS System Architecture
 
-**Version:** 1.4  
+**Version:** 1.6  
 **Status:** Draft  
 **Last updated:** 2026-09-04  
 **Author:** Architecture Team
+
+**Changelog since 1.5:** Status-only. `DATA-MODEL.md` §9.1 is closed (`sales.server_received_at` mirrored into SQLite). No layering change.
+
+**Changelog since 1.4:** Aligns §10 with `REQUIREMENTS.md`: the dashboard remains prohibited from remote shop-data writes (sales, prices, inventory, expenses) and is permitted three administrative operations — staff create, device revoke, catalog import. §7 and §11 record `POST /v1/setup` as the other unauthenticated endpoint. §9 records that setup must complete before public exposure. No layering change.
 
 **Changelog since 1.3:** Status-only. §13 records G1 and `SYNC-PROTOCOL.md` §11.2 as resolved, and updates document versions to match the tree: `SYNC-PROTOCOL.md` v1.6, `DATA-MODEL.md` v1.6, `API-SPEC.md` v1.5, `UI-GUIDELINES.md` v1.1, `CODING-STANDARDS.md` v1.3. The three void-copy gaps previously listed against `UI-GUIDELINES.md` are closed by §11.2. No layering or request-flow change.
 
@@ -269,6 +273,8 @@ App stores device_id, user_id, user_role locally
 App is ready — subsequent launches work offline
 ```
 
+First login assumes `POST /v1/setup` has already created the owner (`API-SPEC.md` §2.5). Setup is not a login and does not issue tokens.
+
 ### Subsequent launches (offline-capable)
 
 ```
@@ -341,6 +347,7 @@ DigitalOcean / Hetzner VPS
 - Go backend built as a Docker image, deployed via Docker Compose
 - Schema migrations run automatically on startup (using `golang-migrate`)
 - Zero-downtime deploys are not required at launch — brief maintenance windows are acceptable for a single shop
+- **`POST /v1/setup` must succeed before the API is exposed to the public internet.** First-owner credentials are not created by logging in; they are created by that bootstrap (`API-SPEC.md` §2.5, `REQUIREMENTS.md` §5.1).
 
 ---
 
@@ -361,13 +368,21 @@ As the remote owner (accessing from iPhone or laptop in Thailand):
 | Sync status | When each device last synced — if tablet goes dark for hours, you'll know |
 | Staff activity | Every sale tagged with who made it |
 
+What you **can** do remotely (closed administrative set — `API-SPEC.md` §1.8):
+
+- Create the staff account (`POST /v1/users`)
+- Revoke a lost device (`POST /v1/devices/{id}/revoke`)
+- Upload the launch CSV catalog (`POST /v1/catalog/import`)
+
 What you **cannot** do remotely (intentional):
 
 - Void or edit sales
-- Change prices or products
+- Change prices or products except via the catalog-import endpoint above
+- Submit `POST /v1/sync/events`
+- Add, edit, or delete expenses
 - Approve or reject anything
 
-The shop operates autonomously. You observe and advise — you don't intervene in real-time operations from far away. This keeps the system simple and prevents accidental remote changes during a busy shop day.
+The shop operates autonomously. You observe and advise on day-to-day trading — you don't intervene in real-time POS operations from far away. The three administrative writes exist so handover and lost-device recovery work without a developer on site.
 
 ---
 
@@ -377,7 +392,7 @@ The shop operates autonomously. You observe and advise — you don't intervene i
 |---------|-----------|
 | JWT theft on device | Tokens in `flutter_secure_storage` (AES encrypted) |
 | Offline JWT abuse | Acceptable risk for single-operator shop — 30-day refresh token expiry |
-| API access without auth | All endpoints require valid JWT except `/auth/login` |
+| API access without auth | All endpoints require valid JWT except `POST /v1/auth/login` and `POST /v1/setup` |
 | Staff privilege escalation | Role checked server-side on every request, not just client-side |
 | Data in transit | HTTPS everywhere, no plain HTTP |
 | Database exposure | PostgreSQL not exposed publicly — only Go API is internet-facing |
@@ -408,15 +423,13 @@ Filenames below are the actual on-disk names. Earlier versions of this table use
 
 | Document | Status | Purpose |
 |----------|--------|---------|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.6, §11 settled (G1 / §11.1 and honest optimistic void / §11.2) | Sync design, failover, conflict resolution, rejection reconciliation |
-| `DATA-MODEL.md` | ✅ Done — v1.6, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
-| `API-SPEC.md` | ✅ Done — v1.5 | All REST endpoints, sync event types, WebSocket events |
-| `ARCHITECTURE.md` | ✅ Done — v1.4 | This document |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.8, §11 settled (G1 / §11.1 and honest optimistic void / §11.2) | Sync design, failover, conflict resolution, rejection reconciliation |
+| `DATA-MODEL.md` | ✅ Done — v1.8, 0 open decisions (`sales.server_received_at` SQLite mirror closed) | Database schema for SQLite and PostgreSQL |
+| `API-SPEC.md` | ✅ Done — v1.7 | All REST endpoints, sync event types, WebSocket events |
+| `ARCHITECTURE.md` | ✅ Done — v1.6 | This document |
 | `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration. Supersedes §4 of this document, which is a summary. Label printer confirmed post-launch by its §6. |
-| `UI-GUIDELINES.md` | ✅ Complete — v1.1 | Design rules for non-technical users. Void copy, `CANCELLED` derivation, and the deferred-rejection notice are specified in its §5.5, §5.8 and §6 (`SYNC-PROTOCOL.md` §11.2). |
-| `CODING-STANDARDS.md` | 🟡 Written at v1.3 — 2 conformance fixes needed | Repo layout, layering, naming, testing. Its §5.8 must conform to `API-SPEC.md` §1.4, and §4.3 to `SYNC-PROTOCOL.md` §2.5. |
-| `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
+| `UI-GUIDELINES.md` | ✅ Complete — v1.2 | Design rules for non-technical users. Void copy, `CANCELLED` derivation, and the deferred-rejection notice are specified in its §5.5, §5.8 and §6 (`SYNC-PROTOCOL.md` §11.2). |
+| `CODING-STANDARDS.md` | ✅ Done — v1.4 | Repo layout, layering, naming, testing. §5.8 matches `API-SPEC.md` §1.4; §4.3 matches `SYNC-PROTOCOL.md` §2.5. |
+| `REQUIREMENTS.md` | ✅ Done — v1.5 | Formal in-scope / out-of-scope for v1 |
 | `DEPLOYMENT.md` | 🔲 Not written | §9 of this document is the only current source and is a summary. |
 | `SECURITY.md` | 🔲 Not written | §11 of this document is the only current source and is a summary. |
-
-**What 🟡 means in this table (added 1.2).** `CODING-STANDARDS.md` (v1.3) is written in full, but two conformance items named in its row above remain open. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.

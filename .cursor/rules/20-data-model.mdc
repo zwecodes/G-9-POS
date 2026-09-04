@@ -7,27 +7,31 @@ alwaysApply: false
 # G9POS — Data Model Rules
 
 ## ID Convention
-All IDs are UUIDs generated on the device. Never use auto-increment integers.
+UUIDs only. Never auto-increment integers.
+- Device-originated shop records: generate on the device
+- Server-originated: `users.id` (`POST /v1/setup`, `POST /v1/users`); category/product/inventory-event ids from `POST /v1/catalog/import`
+- `devices.id` is client-generated on first install
+
 ```dart
-// Flutter — generate on device
 import 'package:uuid/uuid.dart';
 final id = const Uuid().v4();
 ```
 ```go
-// Go — use google/uuid
 import "github.com/google/uuid"
 id := uuid.New().String()
 ```
 
-## Every Sync Table Has These Columns
+## Sync columns — default, with exemptions
+Default for device-originated business records:
 ```
-id          TEXT/UUID     Primary key — UUID, device-generated
-created_at  INTEGER/TIMESTAMPTZ  Unix ms (SQLite) / TIMESTAMPTZ (PostgreSQL)
-updated_at  INTEGER/TIMESTAMPTZ
-deleted_at  INTEGER/TIMESTAMPTZ  NULL = active, non-null = soft deleted
-device_id   TEXT/UUID     Device that last modified this record
+id, created_at, updated_at, deleted_at, device_id
 ```
-Exception: `inventory_events` — append-only, has no `updated_at` or `deleted_at`.
+Exemptions (`DATA-MODEL.md` §1.2):
+- `inventory_events` — no `updated_at` / `deleted_at` (append-only; SQLite-only `rejected_at` is not a soft delete)
+- `sale_items`, `supplier_order_items` — nested payload children
+- `users`, `devices`, `sync_queue` — not device-originated sync events
+
+Filter `deletedAt.isNull()` only on tables that have `deleted_at`.
 
 ## Soft Delete — Always
 ```dart
@@ -42,57 +46,45 @@ Future<void> softDelete(String id) =>
 await (delete(table)..where((t) => t.id.equals(id))).go();
 ```
 
-Always filter soft-deleted records in every read query:
-```dart
-// ✅ Always include this filter
-..where((t) => t.deletedAt.isNull())
-```
+## Users
+Server-originated. No `USER_*` events.
+- First owner: `POST /v1/setup` (empty table, atomic)
+- Staff: `POST /v1/users` (at most one non-deleted staff)
+- PostgreSQL-only: `username`, `password_hash`
+- SQLite: `id`, `name`, `pin` (hash), `role`, timestamps — pulled so PIN unlock works
+- Never pull or return `password_hash`
 
 ## Inventory Events — Append Only
-`inventory_events` is the most important table. Rules:
-- **Never UPDATE or DELETE rows in this table**
-- **Never store computed stock** — always `SUM(quantity_delta)`
+- Never hard-delete rows
+- Never store computed stock — always `SUM(quantity_delta)`
 - `quantity_delta` is signed: negative = stock out, positive = stock in
-- Every row has a `reference_id` linking it to its parent (sale, order) — except standalone events
+- Grouped types (`INVENTORY_SOLD`, `INVENTORY_VOIDED`, `INVENTORY_RESTOCKED`): `reference_id` = parent sale or order
+- Standalone types (`INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, `INVENTORY_RETURNED`): `reference_id = NULL`
 
-**Standalone events** (`INVENTORY_ADJUSTED`, `INVENTORY_DAMAGED`, `INVENTORY_RETURNED`) have `reference_id = NULL` — they have no parent entity.
+**The only permitted UPDATE** to an existing SQLite `inventory_events` row is setting `rejected_at` while `synced_at IS NULL` (G1).
 
 **Local stock query (SQLite) — must exclude rejected events:**
 ```dart
-// ✅ Correct — excludes rejected
 final stock = await (selectOnly(inventoryEvents)
   ..addColumns([inventoryEvents.quantityDelta.sum()])
   ..where(inventoryEvents.productId.equals(productId))
-  ..where(inventoryEvents.rejectedAt.isNull()))  // ← required
+  ..where(inventoryEvents.rejectedAt.isNull()))
   .getSingle();
 ```
 
-**Server stock query (PostgreSQL) — unchanged, no rejected_at:**
+**Server stock query (PostgreSQL) — no rejected_at:**
 ```sql
 SELECT SUM(quantity_delta) FROM inventory_events WHERE product_id = $1;
 ```
 
-## G1 — rejected_at Column (SQLite only)
-`inventory_events` has a SQLite-only column `rejected_at INTEGER NULL`.
+## G1 — rejected_at (SQLite only)
+`inventory_events.rejected_at INTEGER NULL`
 
 **Invariant:** `rejected_at IS NOT NULL → synced_at IS NULL`
-- Only set on rows the server never saw
+- Only set on rows the server never accepted
 - Never sent to server, never replicated
-- Enforced in repository layer AND as a SQLite CHECK constraint
-
-```dart
-// ✅ Marking rejection — enforce invariant
-Future<void> markRejected(String eventId) async {
-  final event = await getById(eventId);
-  if (event.syncedAt != null) {
-    throw StateError('Cannot reject a synced event: $eventId');
-  }
-  await (update(inventoryEvents)..where((e) => e.id.equals(eventId)))
-    .write(InventoryEventsCompanion(
-      rejectedAt: Value(DateTime.now().millisecondsSinceEpoch)
-    ));
-}
-```
+- Enforced in the DAO **and** a SQLite CHECK constraint (not a Dart `assert`)
+- Standalone: mark by event `id`; grouped: mark by `reference_id`
 
 ## SQLite vs PostgreSQL Differences
 | Concern | SQLite (Drift) | PostgreSQL |
@@ -100,28 +92,15 @@ Future<void> markRejected(String eventId) async {
 | Timestamps | INTEGER (Unix ms) | TIMESTAMPTZ |
 | Booleans | INTEGER (0/1) | BOOLEAN |
 | UUIDs | TEXT | UUID native |
-| Extra columns | `synced_at`, `rejected_at` (inventory_events only) | `server_received_at` |
+| Extra columns | `synced_at`; `rejected_at` on inventory_events; `sales.server_received_at` (server-authored copy) | `server_received_at` on inventory_events (PostgreSQL only) and sales (authoritative); `username`/`password_hash` on users |
 | sync_queue | Present | Not present |
 | devices table | Not present | Present |
 
 ## Price and Currency
-All prices stored as integers (Myanmar Kyat, no decimals):
-```dart
-// ✅ Correct
-final priceMmk = 13000; // integer
-
-// ❌ Wrong
-final price = 130.00; // no decimals in MMK
-```
+All prices stored as integers (Myanmar Kyat, no decimals).
 
 ## Timestamps
-All timestamps are Unix milliseconds in SQLite:
-```dart
-// ✅ Correct
-final now = DateTime.now().millisecondsSinceEpoch; // int
-
-// ❌ Wrong — never store DateTime objects in Drift
-```
+All timestamps are Unix milliseconds in SQLite.
 
 ## Migrations
 - Never modify an existing migration file

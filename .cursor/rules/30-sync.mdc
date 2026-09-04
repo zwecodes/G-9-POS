@@ -19,6 +19,7 @@ SALE_CREATED          EXPENSE_CREATED        EXPENSE_UPDATED
 EXPENSE_DELETED       SUPPLIER_ORDER_RECEIVED
 DEVICE_ACTIVATED
 ```
+`EXPENSE_CREATED` may be submitted by owner or staff. `EXPENSE_UPDATED` / `EXPENSE_DELETED` are owner only.
 
 ## Sync Queue (SQLite)
 Every write appends to `sync_queue` before returning to the UI:
@@ -28,7 +29,7 @@ await _db.syncQueueDao.enqueue(
   eventType: 'PRODUCT_UPDATED',
   payload: jsonEncode(payload),
   deviceId: deviceId,
-  referenceId: referenceId, // groups related events — nullable for standalone
+  referenceId: referenceId, // causal group key; NULL for standalone (never the row's own id)
   createdAt: DateTime.now().millisecondsSinceEpoch,
 );
 ```

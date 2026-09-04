@@ -1,9 +1,13 @@
 # REQUIREMENTS.md
 
-**Version:** 1.3
+**Version:** 1.5
 **Status:** Complete
 **Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.4:** `sales.server_received_at` SQLite mirror is resolved (`DATA-MODEL.md` §8). Void-gating UI remains post-launch. No other scope change.
+
+**Changelog since 1.3:** No new product features. Aligns this document with the API/data-model contracts: staff expenses remain in scope (the API now matches); catalog import is named as the third dashboard administrative write; staff create and first-owner setup point at `API-SPEC.md` §2.5–§2.6.
 
 ---
 
@@ -27,7 +31,7 @@ That constraint shapes every scope decision below.
 |------|-------|-------------|
 | Owner | 1 | Full access — sales, products, inventory, reports, settings |
 | Staff | 1 | Restricted — sales and expenses only, no reports, no product edits, no void |
-| Remote admin/viewer | 1 (Zwe) | Shop monitoring from Thailand — reports, live sales, stock levels. Read-only except for the two explicitly documented administrative operations: staff account creation and device revocation. |
+| Remote admin/viewer | 1 (Zwe) | Shop monitoring from Thailand — reports, live sales, stock levels. Read-only for shop data. Administrative writes: staff account creation, device revocation, and CSV catalog import only. |
 
 Maximum 2 active shop accounts at launch (owner + 1 staff). The system must support this from day one — not as a post-launch addition — because the owner may need to leave the shop in the hands of staff before v2 is ready.
 
@@ -64,7 +68,7 @@ The standby phone is not optional. Given remote setup and unreliable power, havi
 - Category management
 - Barcode lookup via scanner
 - Manual barcode entry fallback when scanner unavailable
-- **CSV bulk import — launch blocker.** ~500 products cannot be entered manually. The admin dashboard must support uploading a CSV to populate the initial product catalogue before the shop goes live.
+- **CSV bulk import — launch blocker.** ~500 products cannot be entered manually. The admin dashboard uploads a CSV via `POST /v1/catalog/import` (`API-SPEC.md` §10.2). The server applies normal `PRODUCT_CREATED` / `CATEGORY_CREATED` / `INVENTORY_ADJUSTED` events; POS devices receive the catalog through pull. Atomic: the whole file commits or nothing does.
 - Soft delete only — no hard deletes
 
 **Inventory**
@@ -104,7 +108,7 @@ The standby phone is not optional. Given remote setup and unreliable power, havi
 - Full sales history and expense history
 - Sync status per device — Zwe can see when each device last synced
 - Staff activity — every sale tagged with operator
-- Administrative operations permitted: staff account creation and device revocation only — no remote writes to shop data (sales, products, inventory, expenses)
+- Administrative operations permitted: staff account creation, device revocation, and CSV catalog import — no remote writes to sales, live prices, inventory adjustments, or expenses
 
 **Hardware**
 - Bluetooth HID barcode scanner (Netum NT-1228BL or equivalent)
@@ -115,8 +119,8 @@ The standby phone is not optional. Given remote setup and unreliable power, havi
 **First-run setup (critical — remote handover)**
 - Guided setup flow the owner can complete alone without calling Zwe
 - Mandatory checklist: tablet paired to scanner ✓, tablet paired to printer ✓ (if purchased), phone paired to scanner ✓, phone paired to printer ✓ (if purchased)
-- Product catalogue import via CSV (owner or Zwe uploads before handover)
-- First owner account provisioned before API goes public
+- Product catalogue import via CSV (owner or Zwe uploads from the admin dashboard via `POST /v1/catalog/import` before handover)
+- First owner account provisioned by `POST /v1/setup` before API goes public
 - The initial owner provisioning is completed during deployment/bootstrap before public API exposure; the in-shop guided setup begins after that provisioning and requires no developer presence.
 - Both devices logged in and synced before shop opens
 
@@ -124,7 +128,7 @@ The standby phone is not optional. Given remote setup and unreliable power, havi
 - Device name and active POS toggle
 - Hardware test buttons (scanner, printer)
 - Sync status and manual sync trigger
-- Staff account management (owner only)
+- Staff account management (owner JWT on the device; remote create via dashboard `POST /v1/users`). Update / disable / PIN reset remain post-launch.
 - Change own PIN (staff PIN reset by owner is post-launch)
 
 ### 5.2 Out of scope for v1 — explicitly deferred
@@ -143,7 +147,7 @@ The standby phone is not optional. Given remote setup and unreliable power, havi
 | Automated reorder alerts | Post-launch |
 | iOS POS app | Dashboard only on iOS — POS is Android |
 | Microservices | Single Go monolith is correct at this scale |
-| Void gating by shop-day on device | Post-launch (§9.1 / Design 3) — honest copy handles v1 |
+| Void gating by shop-day on device | Post-launch — honest copy handles v1 (`SYNC-PROTOCOL.md` §11.2). `sales.server_received_at` is mirrored into SQLite; using it to hide the void action is deferred |
 | Staff update / disable / staff PIN reset | Post-launch — owner manages manually for now |
 | Offline dashboard | Dashboard requires internet — this is acceptable |
 
@@ -247,7 +251,7 @@ Items identified during documentation that are real but deferred:
 
 | Item | Doc reference |
 |------|--------------|
-| Void gating by shop-day on device | DATA-MODEL §9.1 |
+| Void gating by shop-day on device | UI-GUIDELINES §5.5; REQUIREMENTS §5.2 |
 | Staff update / disable / PIN change endpoints | API-SPEC §2.6 |
 | sales.server_received_at local void gating UI | UI-GUIDELINES §5.5 |
 | Camera barcode scanning | HARDWARE-INTEGRATION §7 |

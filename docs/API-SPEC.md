@@ -1,9 +1,13 @@
 # G9POS API Specification
 
-**Version:** 1.5
+**Version:** 1.7
 **Status:** Resolved — no open questions
 **Last updated:** 2026-09-04
 **Author:** Architecture Team
+
+**Changelog since 1.6:** Status-only. `DATA-MODEL.md` §9.1 is closed: `sales.server_received_at` is mirrored into SQLite and delivered on `GET /v1/sync/pull` as sale-row metadata. No wire-contract change: the field is not added to the `SALE_CREATED` event payload. Void-gating UI remains post-launch. G1 and `SYNC-PROTOCOL.md` §11.2 are unchanged.
+
+**Changelog since 1.5:** Pre-implementation contract pass. (1) §1.1 lists the closed set of non-sync REST writes: auth, device rename, first-owner setup, staff create, device revoke, and catalog import. Shop-data writes for products, categories, sales, void, expenses, suppliers, and orders remain events through `POST /v1/sync/events` only. (2) §2.5 adds `POST /v1/setup` (empty-users, atomic, deploy-time). (3) §2.6 adds `POST /v1/users` / `GET /v1/users` for v1 staff create and list; update/disable/PIN reset stay post-launch. (4) §3.4 and §1.8 allow `dashboard_viewer` on the two (now three) approved admin writes only — staff create, device revoke, catalog import. (5) `EXPENSE_CREATED` is owner and staff; update/delete remain owner-only. (6) §10.2 adds `POST /v1/catalog/import`: dashboard-initiated, atomic, produces `CATEGORY_CREATED` / `PRODUCT_CREATED` / `INVENTORY_ADJUSTED` through the same event processor. (7) §1.3 also exempts setup from the auth header. **§1.4 envelope JSON and the three binding properties are unchanged.** The former §5.8 conflict note is closed — `CODING-STANDARDS.md` v1.4 conforms.
 
 **Changelog since 1.4:** No contract changes. Status-only: §6.1 no longer describes G1 (`SYNC-PROTOCOL.md` §11.1) or honest optimistic void (`SYNC-PROTOCOL.md` §11.2) as open. §16 document versions updated to the current tree. Endpoints, envelopes, `rejected[]`, reason codes, and status codes are unchanged.
 
@@ -22,13 +26,22 @@
 This document defines every REST endpoint and WebSocket event exposed by the G9POS Go backend, for two consumer types:
 
 - **The Flutter POS app** (tablet + phone) — writes shop data exclusively through the sync queue (§9); reads its own local SQLite for everything else and never depends on REST reads to function offline.
-- **The remote dashboard** (iPhone / Windows / browser) — read-only, plus live updates over WebSocket. It has no write endpoints at all, matching `ARCHITECTURE.md` §10 ("you observe and advise, you don't intervene").
+- **The remote dashboard** (iPhone / Windows / browser) — monitoring plus live updates over WebSocket. Shop-data writes (sales, prices, inventory, expenses) are prohibited remotely. The only dashboard writes are the administrative operations in `ARCHITECTURE.md` §10: staff account creation, device revocation, and catalog import.
 
 ### 1.1 The one write path
 
-Per `SYNC-PROTOCOL.md` §1: *"Every write goes to local SQLite first, server second."* This is not a POS-app implementation detail — it's an API contract. **There is no REST endpoint anywhere in this spec that creates or mutates a product, category, sale, void, expense, supplier, or supplier order directly.** Every one of those is an event type submitted through `POST /v1/sync/events` (§9), exactly like `INVENTORY_SOLD` already is. This was not true in v1.0 of this doc — v1.0 accidentally introduced a second write path with no real caller, which would have meant maintaining two code paths (REST handler + sync handler) that had to stay behaviorally identical forever, for endpoints nothing in the system actually calls. Removed.
+Per `SYNC-PROTOCOL.md` §1: *"Every write goes to local SQLite first, server second."* This is not a POS-app implementation detail — it's an API contract for **shop data**. **There is no REST endpoint that the POS app calls to create or mutate a product, category, sale, void, expense, supplier, or supplier order.** Every one of those is an event type submitted through `POST /v1/sync/events` (§9), exactly like `INVENTORY_SOLD` already is. This was not true in v1.0 of this doc — v1.0 accidentally introduced a second write path with no real caller, which would have meant maintaining two code paths (REST handler + sync handler) that had to stay behaviorally identical forever, for endpoints nothing in the system actually calls. Removed.
 
-The only things that remain genuine REST writes are: **auth** (login/refresh/logout — inherently synchronous, requires a server round-trip by definition) and **device rename** (cosmetic metadata, not a synced business record).
+Genuine REST writes, none of which are POS shop-data CRUD, are the closed set below. Do not add to this list without amending this section:
+
+| Endpoint | Why it is REST, not a sync event |
+|---|---|
+| `POST /v1/auth/login`, `/refresh`, `/logout` | Auth is inherently synchronous and requires a server round-trip |
+| `PATCH /v1/devices/{id}` | Cosmetic device name — not a synced business record |
+| `POST /v1/setup` | First-owner bootstrap before any JWT exists (§2.5) |
+| `POST /v1/users` | Staff provisioning — `users` is not device-originated (`DATA-MODEL.md` §3.1, §2.6) |
+| `POST /v1/devices/{id}/revoke` | Immediate server-side token denylist (§3.4) |
+| `POST /v1/catalog/import` | Launch catalog load; applies `PRODUCT_CREATED` / `CATEGORY_CREATED` / `INVENTORY_ADJUSTED` through the **same event processor** as §9, not a second product model (§10.2) |
 
 ### 1.2 Base URL & versioning
 
@@ -40,7 +53,7 @@ Path-based versioning (`/v1`). A breaking change requires `/v2` — a shop's tab
 
 ### 1.3 Auth header
 
-All endpoints except `POST /v1/auth/login` require `Authorization: Bearer <access_token>`. Missing/expired → `401`, handled by the offline-auth flow in `ARCHITECTURE.md` §7 (never surfaced as a login prompt while offline).
+All endpoints except `POST /v1/auth/login` and `POST /v1/setup` require `Authorization: Bearer <access_token>`. Missing/expired → `401`, handled by the offline-auth flow in `ARCHITECTURE.md` §7 (never surfaced as a login prompt while offline).
 
 ### 1.4 Standard response envelope
 
@@ -64,16 +77,7 @@ Error:
 
 Any lower-authority document, helper struct, or scaffolding example that describes a different envelope — for example a flat `{ success, data, error }` object — is wrong and must be corrected to match this section rather than the reverse. Per the project's documentation hierarchy, a summary or standards document does not get to redefine a contract owned by this specification.
 
-**Confirmed conflict with `CODING-STANDARDS.md` §5.8 (still present in v1.3).** That section's `APIResponse` struct is exactly the flat form ruled out above, and it does not conform on four counts:
-
-| `CODING-STANDARDS.md` §5.8 | This section requires |
-|---|---|
-| A `Success bool` field, serialized as `success` | No `success` flag — presence of `data` vs `error` is the signal |
-| `Error` is a `string` | `error` is an **object** carrying `code`, `message`, `field` |
-| No `code` field anywhere | `error.code` is a machine-readable enum from §1.5 |
-| No `meta` field anywhere | `meta.request_id` on **every** response |
-
-§5.8 is the lower-authority document and is the one that must change; this section does not move. The fix is not limited to the struct — the `response.OK` / `response.BadRequest` / `response.Unauthorized` / `response.InternalError` helpers built on it, and the `internal/products` handler examples in §5.3 and §5.4 that call them, all serialize the wrong shape and must be reworked together. As written, code scaffolded from §5.8 would satisfy no endpoint in this specification, and would break the `retry_after` (§2.1) and `blocking_product_count` (§5) fields outright, since a flat string `error` has nowhere to put them.
+**Conformance (`CODING-STANDARDS.md` §5.8).** Closed in that document's v1.4. Helpers (`response.OK`, `response.BadRequest`, `response.Unauthorized`, `response.InternalError`) and handler examples serialize this envelope. Reason-specific extra fields (`retry_after`, `blocking_product_count`, import `details`) live on the `error` object, never on a parallel envelope.
 
 ### 1.5 Error codes
 
@@ -81,9 +85,12 @@ Any lower-authority document, helper struct, or scaffolding example that describ
 |------|-------------|---------|
 | `VALIDATION_ERROR` | 400 | Request body failed validation |
 | `UNAUTHORIZED` | 401 | Missing/invalid/expired token |
+| `ACCOUNT_LOCKED` | 401 | Login lockout — see §2.1. `error.retry_after` is seconds remaining |
 | `FORBIDDEN` | 403 | Valid token, insufficient role |
 | `NOT_FOUND` | 404 | Resource doesn't exist or is soft-deleted |
 | `CONFLICT` | 409 | LWW conflict, or a business rule rejected an event (e.g. void outside the allowed day). For events submitted via the sync queue this is a **per-event** outcome reported in the response body, not the batch's HTTP status — see §6.1 |
+| `SETUP_ALREADY_COMPLETE` | 409 | `POST /v1/setup` when any `users` row already exists (§2.5) |
+| `STAFF_LIMIT_REACHED` | 409 | `POST /v1/users` when a non-deleted staff user already exists (§2.6) |
 | `PAYLOAD_TOO_LARGE` | 413 | Batch exceeds 5MB |
 | `RATE_LIMITED` | 429 | Too many requests, see §12 |
 | `INTERNAL_ERROR` | 500 | Unhandled server error |
@@ -98,13 +105,21 @@ Every endpoint lists which role(s) may call it: **owner**, **staff**, or **dashb
 
 ### 1.8 Dashboard identity — resolved
 
-**Resolved in 1.2.** The dashboard does **not** reuse the owner's `role: owner` token. `POST /v1/auth/login` accepts an optional `login_context: "dashboard"` field; when set, the server still validates the same username/password but issues a token with `role: dashboard_viewer` instead of `role: owner`. Every write-capable endpoint and every mutating event type in §5 rejects `dashboard_viewer` outright, even if a `dashboard_viewer` token is replayed against a POS-only path — this is enforced the same way as any other role check (§1.6), not by the client hiding buttons. This means a stolen iPhone/laptop/browser dashboard session can only ever read data, never act as the owner, which was the actual gap in v1.0/v1.1.
+**Resolved in 1.2; admin carve-out stated in 1.6.** The dashboard does **not** reuse the owner's `role: owner` token. `POST /v1/auth/login` accepts an optional `login_context: "dashboard"` field; when set, the server still validates the same username/password but issues a token with `role: dashboard_viewer` instead of `role: owner`.
+
+Every mutating event type in §5, and every write-capable endpoint **except** the closed administrative set below, rejects `dashboard_viewer` outright — even if that token is replayed against a POS-only path. This is enforced the same way as any other role check (§1.6), not by the client hiding buttons.
+
+`dashboard_viewer` **may** call only:
+
+- `POST /v1/users` — staff create (§2.6)
+- `POST /v1/devices/{id}/revoke` — device revocation (§3.4)
+- `POST /v1/catalog/import` — initial catalog import (§10.2)
+
+A stolen dashboard session still cannot void sales, change prices, submit sync events, or edit expenses. It can create the one staff account, revoke a lost device, and load the launch catalog — the operations `REQUIREMENTS.md` assigns to the remote admin.
 
 ---
 
 ## 2. Authentication
-
-*(Unchanged from v1.0 — the only genuine synchronous-write endpoints in the system.)*
 
 ### 2.1 `POST /v1/auth/login`
 
@@ -124,7 +139,56 @@ Owner/staff. Revokes the refresh token server-side (denylist by token ID). Does 
 
 Remains **on-device only** (not a server endpoint) per the original design — the PIN itself is never validated by, or known to, the server.
 
-**Remote revocation — resolved in 1.2.** The actual risk isn't the PIN in isolation, it's a *lost device*. So instead of making PIN validation server-side (which would break offline staff login entirely), the owner gets a remote safety valve: `POST /v1/devices/{id}/revoke` (owner only, dashboard or POS). This invalidates that device's refresh token server-side immediately. The device itself keeps working offline until it next attempts to sync or refresh — at that point it's rejected and forced back to the login screen, which requires the owner's credentials, not the staff PIN, to re-authenticate. This doesn't revoke the PIN, but it kills the lost device's ability to do anything once it touches the network again, which is the actual threat being mitigated.
+**Remote revocation — resolved in 1.2.** The actual risk isn't the PIN in isolation, it's a *lost device*. So instead of making PIN validation server-side (which would break offline staff login entirely), the owner gets a remote safety valve: `POST /v1/devices/{id}/revoke` (owner JWT or `dashboard_viewer`, from dashboard or POS). This invalidates that device's refresh token server-side immediately. The device itself keeps working offline until it next attempts to sync or refresh — at that point it's rejected and forced back to the login screen, which requires the owner's credentials, not the staff PIN, to re-authenticate. This doesn't revoke the PIN, but it kills the lost device's ability to do anything once it touches the network again, which is the actual threat being mitigated.
+
+PIN hashes are stored on `users.pin` (`DATA-MODEL.md` §3.1) and replicated to devices via first-run pull and `GET /v1/sync/pull`. The server never accepts a PIN as a login factor. `POST /v1/auth/login` always requires username + password.
+
+### 2.5 `POST /v1/setup` — first owner (new in 1.6)
+
+No auth. Deploy-time only. Creates the single owner row when `users` is empty.
+
+**Must be completed before the API is exposed to the public internet** (`REQUIREMENTS.md` §5.1, `ARCHITECTURE.md` §9). After setup, the owner authenticates with the existing `POST /v1/auth/login` — this endpoint does not issue JWT tokens and does not invent a second auth mechanism.
+
+Request: `{ "username": "string", "password": "string", "name": "string", "pin": "string" }`
+
+- `username` — unique, required. Used by `POST /v1/auth/login`.
+- `password` — required, stored hashed on `users.password_hash` (PostgreSQL only). Never returned, never logged.
+- `name` — display name.
+- `pin` — exactly four digits. Stored hashed on `users.pin` (same PIN-hash treatment as staff). Used for on-device unlock only.
+
+`role` is always `owner`. The request must not send a role.
+
+**Atomicity.** The empty-table check and the insert run in one database transaction. Concurrent setup requests serialize on that transaction; the loser receives `409` with `error.code: SETUP_ALREADY_COMPLETE`. Any existing `users` row — including a soft-deleted one — means setup is complete. There is no second-owner path.
+
+**Rate limit:** 5 req/min/IP, same bucket family as login (§12).
+
+Success: `{ "data": { "id", "username", "name", "role" }, "meta" }` — no password, no PIN, no tokens.
+
+Errors: `VALIDATION_ERROR` (400), `SETUP_ALREADY_COMPLETE` (409), `RATE_LIMITED` (429).
+
+### 2.6 Staff accounts (new in 1.6)
+
+`users` is not a sync event (`DATA-MODEL.md` §1.2). v1 provides create and list only. Update, disable, and staff PIN reset remain post-launch (`REQUIREMENTS.md` §5.2).
+
+#### `POST /v1/users`
+
+Owner JWT or `dashboard_viewer`. Creates the one staff account.
+
+Request: `{ "name": "string", "pin": "string" }`
+
+- `pin` — exactly four digits; stored hashed. Never returned.
+- `role` is always `staff`. Sending `role: owner` is `VALIDATION_ERROR`. This endpoint cannot create a second owner.
+- Staff have no `username` and no `password_hash`. They cannot call `POST /v1/auth/login`. They unlock the already-authenticated device with the PIN (§2.4).
+
+v1 allows at most one non-deleted staff user (`REQUIREMENTS.md` §3). A second create returns `409` with `error.code: STAFF_LIMIT_REACHED`.
+
+Success: `{ "data": { "id", "name", "role", "created_at" }, "meta" }`.
+
+The new row is included in subsequent `GET /v1/sync/pull` and first-run pulls so both POS devices can verify the PIN locally. Password hashes are never pulled.
+
+#### `GET /v1/users`
+
+Owner, dashboard. Lists non-deleted users. Response items are `{ id, name, role, created_at }` — never `password_hash`, never `pin`.
 
 ---
 
@@ -140,7 +204,7 @@ Owner, dashboard. Lists all devices ever registered.
 
 Three independent reasons, all of which already existed in the surrounding design:
 
-1. **It contradicted §1.1.** That section permits exactly two non-event writes — auth and device rename. A third REST write for device activation was never covered by that carve-out.
+1. **It contradicted §1.1.** Device activation is not in the closed REST-write set (auth, device rename, setup, staff create, revoke, catalog import), and failover cannot depend on a synchronous call.
 2. **It could not do the job.** `SYNC-PROTOCOL.md` §5.2 requires failover to complete with "no internet required at any step." A synchronous REST call cannot satisfy that; a queued event can, which is why §5.3 of that document describes activation as an event that flushes when connectivity returns.
 3. **It was never actually specified.** The old entry pointed at `SYNC-PROTOCOL.md` §5.3 for its definition, but that section defines an event and no endpoint — the reference was dangling.
 
@@ -148,11 +212,11 @@ The dashboard is still notified live: §11.2's `device.activated` fires when the
 
 ### 3.3 `PATCH /v1/devices/{id}`
 
-Owner. Rename only: `{ "name": "string" }`. This is the one non-auth REST write that survives — it's device metadata, not a business record, and doesn't need offline availability (renaming a device from Thailand requires connectivity anyway).
+Owner. Rename only: `{ "name": "string" }`. Device metadata, not a business record, and doesn't need offline availability (renaming a device from Thailand requires connectivity anyway).
 
 ### 3.4 `POST /v1/devices/{id}/revoke`
 
-**New in 1.2.** Owner only. Immediately invalidates the target device's refresh token server-side (denylist by token ID, same mechanism as logout, §2.3). The device is not contacted — it simply fails its next `/v1/auth/refresh` or sync call and falls back to the login screen. This is the resolution to §15 item 3 (lost staff device) — see §2.4.
+**New in 1.2; dashboard_viewer permitted in 1.6.** Owner JWT or `dashboard_viewer`. Immediately invalidates the target device's refresh token server-side (denylist by token ID, same mechanism as logout, §2.3). The device is not contacted — it simply fails its next `/v1/auth/refresh` or sync call and falls back to the login screen. This is the resolution to §15 item 3 (lost staff device) — see §2.4. Staff JWT: `403 FORBIDDEN`.
 
 ---
 
@@ -186,7 +250,7 @@ Owner, staff (own only), dashboard. Includes nested `sale_items`.
 
 ### 4.7 `GET /v1/expenses`
 
-Owner, dashboard only — not staff. Filters: `date_from`, `date_to`, `category`.
+Owner, staff (device history is local SQLite), dashboard. Filters: `date_from`, `date_to`, `category`. Staff may list expenses — they can add them (`REQUIREMENTS.md` §5.1). Reports in §8 remain owner/dashboard only.
 
 ### 4.8 `GET /v1/suppliers`, `GET /v1/supplier-orders`
 
@@ -205,7 +269,8 @@ Owner, dashboard. Standard filtered reads.
 | `INVENTORY_ADJUSTED` / `INVENTORY_DAMAGED` | Owner | `note` field **required** — an unexplained stock change becomes a mystery weeks later. A missing `note` is a permanent rejection, `EVENT_VALIDATION_FAILED` (§6.1). |
 | `SALE_CREATED` | Owner, staff | Carries the sale + its `sale_items` in one event payload. Always submitted as part of a **group** with its inventory events — see §6. **`sale_number` collision handling resolved in 1.2:** `sale_number` (e.g. `S-00142`) is a client-generated, display-only label with **no uniqueness guarantee**. The UUID `id` is the real primary key everywhere it matters (line items, receipts, void references, sync idempotency). If the tablet and phone each generate `S-00142` while both offline, it is cosmetically confusing on a printed receipt but never a data-integrity issue — nothing in the system looks up a sale by `sale_number`. A device-prefixed or server-issued sequence was considered and rejected as unnecessary complexity for a cosmetic concern at this scale. |
 | `SALE_VOIDED` | Owner only | Rejected with `CONFLICT` if outside the same shop-day as the original sale's `server_received_at` (`DATA-MODEL.md` §3.6, §1.7) — returned in `rejected[]` as `VOID_WINDOW_CLOSED` (§6.1), and the device reverts its local void (`SYNC-PROTOCOL.md` §4.4). Generates the group's `INVENTORY_VOIDED` events. Role checked server-side even though the app UI hides the void action from staff — never trust the client. |
-| `EXPENSE_CREATED` / `EXPENSE_UPDATED` / `EXPENSE_DELETED` | Owner | LWW, soft delete. |
+| `EXPENSE_CREATED` | Owner, staff | LWW. Staff may add daily shop expenses (`REQUIREMENTS.md` §5.1). |
+| `EXPENSE_UPDATED` / `EXPENSE_DELETED` | Owner | LWW, soft delete. Staff cannot edit or delete expenses. |
 | `SUPPLIER_CREATED` / `SUPPLIER_UPDATED` / `SUPPLIER_DELETED` | Owner | LWW, soft delete. |
 | `SUPPLIER_ORDER_CREATED` / `SUPPLIER_ORDER_UPDATED` | Owner | Carries nested order items in the payload (no separate item-creation events). |
 | `SUPPLIER_ORDER_RECEIVED` | Owner | **Device-originated**, not server-originated — see §7. Submitted as a group with its `INVENTORY_RESTOCKED` events. |
@@ -307,7 +372,9 @@ Products where `computed_stock <= low_stock_threshold`.
 
 Owner, dashboard only. Sales count/value by `operator_id`.
 
-**Staff-operated device gating — resolved in 1.2.** All of §8 (reports) and §4.7 (expenses) is gated by the **active PIN user**, not the device's underlying JWT role. A tablet may hold an owner-scoped JWT, but if a staff PIN is currently active on it, the app hides reports and expenses entirely — the server also enforces this by requiring the current `operator_id` (set by the active PIN) to carry `role: owner` on these endpoints, not just the device token. This matches intent (owner-only data) rather than the technicality (device happens to hold an owner-scoped token) — a staff member minding the shop can't open the owner's report screen just because they're on the primary tablet.
+**Staff-operated device gating — resolved in 1.2, expenses entry restored in 1.6.** All of §8 (reports) is gated by the **active PIN user**, not the device's underlying JWT role. A tablet may hold an owner-scoped JWT, but if a staff PIN is currently active on it, the app hides reports — the server also enforces this by requiring the current `operator_id` (set by the active PIN) to carry `role: owner` on these endpoints, not just the device token.
+
+Expense **entry and history** are visible to staff (`EXPENSE_CREATED`, §4.7). The app must not hide the expense screen from a staff PIN. Expense **reports** do not exist as a separate endpoint; profit and range reports stay owner/dashboard.
 
 ---
 
@@ -329,6 +396,59 @@ Owner, dashboard only. Sales count/value by `operator_id`.
 ### 10.1 `GET /v1/dashboard/overview`
 
 Owner, dashboard. Combined response: today's revenue, active device, sync status per device, low-stock count — one call instead of four, deliberately, given a possibly weak connection on the shop's end.
+
+### 10.2 `POST /v1/catalog/import` — CSV catalog (new in 1.6)
+
+Owner JWT or `dashboard_viewer`. Staff: `403`. Initiated from the admin dashboard (`REQUIREMENTS.md` §5.1). This is not `POST /v1/products` and not a second product store.
+
+The server parses the CSV, validates the **entire file**, then applies each resulting change through the **same event processor** used by `POST /v1/sync/events` (§5, §9):
+
+| CSV outcome | Event type | `reference_id` |
+|---|---|---|
+| New category name (no matching non-deleted category) | `CATEGORY_CREATED` | `NULL` |
+| Each data row | `PRODUCT_CREATED` | `NULL` |
+| Data row with `initial_stock` > 0 | `INVENTORY_ADJUSTED` | `NULL` |
+
+Standalone `reference_id` is NULL (`SYNC-PROTOCOL.md` §2.5). The import is **not** one causal group. Request-level atomicity is a single PostgreSQL transaction around the whole file: all events commit, or none do.
+
+POS devices receive the new rows via `GET /v1/sync/pull` and first-run pull (`DATA-MODEL.md` §7). They do not enqueue these events themselves.
+
+**IDs.** Server-generated UUIDs for new categories, products, and inventory events. The CSV has no id column. This is the documented exception to device-generated IDs for this server-originated admin path (`DATA-MODEL.md` §1.2). `device_id` is the calling dashboard (or owner) device from the login payload; `operator_id` is the authenticated owner user id (dashboard_viewer is a claim on that user).
+
+**Content type:** `multipart/form-data` field `file`. UTF-8 CSV, header row required. Maximum 1000 data rows.
+
+**Columns** (header names case-insensitive):
+
+| Column | Required | Notes |
+|---|---|---|
+| `name` | yes | Non-empty |
+| `price_mmk` | yes | Integer ≥ 0 |
+| `cost_price_mmk` | no | Integer ≥ 0; empty → null |
+| `barcode` | no | Empty → null |
+| `category` | no | Display name; empty → `category_id` null. Trimmed; matched to an existing non-deleted category by exact name; otherwise a new category is created |
+| `unit` | no | Empty → `pcs` |
+| `low_stock_threshold` | no | Integer ≥ 0; empty → `5` |
+| `initial_stock` | no | Integer ≥ 0; empty or `0` → no inventory event |
+
+`is_active` is true. `image_path` is null — photos are not part of v1 import.
+
+Each `INVENTORY_ADJUSTED` has `note` = `CSV catalog import` (satisfies §5's required note) and `quantity_delta` = `initial_stock`.
+
+**Duplicates and conflicts — fail the whole file, apply nothing:**
+
+- Duplicate non-empty barcode inside the CSV
+- Non-empty barcode that matches an existing product with `deleted_at IS NULL`
+- Invalid number, missing required column, more than 1000 data rows
+
+Empty barcodes are allowed and are not uniqueness keys. Re-importing a file of barcode-less products can therefore create duplicates; v1 import is the launch load, not a merge tool.
+
+**Validation errors** use `400 VALIDATION_ERROR`. `error.message` is plain language (`CSV import failed. No products were created.`). `error.field` is `file`. `error.details` is an array of `{ "row": n, "field": "barcode", "message": "..." }` (`row` is 1-based data row, header = row 0 and is not numbered in `details`). Extra `details` lives on the `error` object the same way `retry_after` does — the envelope in §1.4 does not change.
+
+Success `data`: `{ "products_created": n, "categories_created": n, "inventory_events_created": n }`.
+
+After commit, WebSocket `stock.low` / `stock.negative` may fire for imported stock that crosses those thresholds. `sale.created` does not.
+
+**Not in this endpoint:** `PRODUCT_UPDATED`, price changes, deactivation, or a dedicated inventory REST write. Day-to-day catalog edits remain POS events.
 
 ---
 
@@ -368,7 +488,9 @@ Receive-only from the dashboard. No write path exists here, consistent with §1.
 | Scope | Limit |
 |---|---|
 | `/v1/auth/login` | 5 req/min/IP |
+| `/v1/setup` | 5 req/min/IP |
 | `/v1/sync/events` | 60 req/min/device |
+| `/v1/catalog/import` | 5 req/min/user |
 | All other authenticated endpoints | 300 req/min/user |
 | WebSocket connections | 3 concurrent/user |
 
@@ -380,26 +502,29 @@ Enforced at Nginx per `ARCHITECTURE.md` §9.
 
 | Decision | Resolution |
 |---|---|
-| Write path | Sync queue only. No direct REST write endpoints for any business entity — auth and device-rename are the sole exceptions. |
+| Write path | POS shop-data writes (products, categories, sales, void, expenses, suppliers, orders) go through `POST /v1/sync/events` only. Closed REST writes: auth, device rename, `POST /v1/setup`, `POST /v1/users`, `POST /v1/devices/{id}/revoke`, `POST /v1/catalog/import`. Catalog import applies the existing product/category/inventory event types through the same processor (added 1.6). |
 | Same-day void | Fixed `SHOP_TIMEZONE` (Asia/Yangon) constant, calendar-day boundary against `server_received_at` — not a rolling 24h window. |
 | Sale/inventory atomicity | Grouped by `reference_id`, never split across a sync batch, applied in one DB transaction per group. |
 | Supplier order receipt | Device-originated event group, not server-originated. |
 | Pagination | Cursor-based on all list endpoints. |
 | Response envelope | `{ data, meta }` / `{ error, meta }`, always includes `request_id`. |
 | API versioning | Path-based (`/v1`), breaking changes get a new version. |
-| Staff visibility | Own sales only; no access to expenses or reports at all — enforced by active PIN user, not device JWT. |
+| Staff visibility | Own sales only; may create and view expenses; no reports. Reports gated by active PIN user, not device JWT (updated 1.6). |
 | WebSocket auth/direction | Query-param token; server → dashboard only, no client writes. |
-| Dashboard identity | Separate `dashboard_viewer` role/token via `login_context: "dashboard"` on the same login endpoint — never the owner role. |
+| Dashboard identity | Separate `dashboard_viewer` role/token via `login_context: "dashboard"` on the same login endpoint — never the owner role. May call only staff create, device revoke, and catalog import (updated 1.6). |
 | Login lockout | 5 failed attempts locks the account 15 minutes, on top of 5/min/IP. No self-service password reset. |
-| Lost staff device | Owner can remotely revoke a device's refresh token (`POST /v1/devices/{id}/revoke`); PIN itself stays on-device. |
+| Lost staff device | Owner JWT or `dashboard_viewer` can remotely revoke a device's refresh token (`POST /v1/devices/{id}/revoke`); PIN itself stays on-device (updated 1.6). |
 | Category deletion | Blocked (`CONFLICT`) while any active product still references the category. |
 | Sale number uniqueness | `sale_number` is a display-only label with no uniqueness guarantee; UUID `id` is the real key. |
 | WebSocket reconnect | Exponential backoff, 1s→30s cap, reset on success. |
-| Reports/expenses gating | Gated by active PIN user's role, not the device's underlying JWT. |
-| Response envelope authority | §1.4 is binding. No lower-authority document or helper may define an alternative shape (added 1.3). |
+| Reports/expenses gating | Reports gated by active PIN user's role. Expense entry is allowed for staff (updated 1.6). |
+| Response envelope authority | §1.4 is binding. No lower-authority document or helper may define an alternative shape (added 1.3). `CODING-STANDARDS.md` §5.8 conforms as of v1.4. |
 | Permanent rejection contract | `rejected[]` array with a closed set of `reason` codes; batch still returns 200; device reverts its local write per `SYNC-PROTOCOL.md` §4.4 — see §6.1 (added 1.3). |
 | Batch HTTP status | `POST /v1/sync/events` returns 200 whenever the batch was processed; per-event outcomes live in the body. Non-200 means the entire batch failed and is retried (added 1.3). |
 | Device activation | `DEVICE_ACTIVATED` queue event, not a REST endpoint — see §3.2 (added 1.3). |
+| First owner | `POST /v1/setup`, empty `users` only, atomic, no JWT issued, completed before public exposure (added 1.6). |
+| Staff provisioning | `POST /v1/users` / `GET /v1/users`. One staff account. No `USER_*` events. Update/disable/PIN reset post-launch (added 1.6). |
+| Catalog import | `POST /v1/catalog/import`. Atomic CSV. Server UUIDs. Existing event types. Devices receive via pull (added 1.6). |
 
 ---
 
@@ -424,13 +549,13 @@ All 7 items originally listed here (dashboard identity, login lockout, staff PIN
 
 | Document | Status | Purpose |
 |---|---|---|
-| `SYNC-PROTOCOL.md` | ✅ Done — v1.6, §11 settled | Sync design, failover, conflict resolution, rejection reconciliation (§4.4) |
-| `DATA-MODEL.md` | ✅ Done — v1.6, 2 open decisions in its §9 | Database schema for SQLite and PostgreSQL |
-| `ARCHITECTURE.md` | ✅ Done — v1.4 | System architecture |
-| `API-SPEC.md` | ✅ Done — v1.5, 0 open questions | This document |
+| `SYNC-PROTOCOL.md` | ✅ Done — v1.8 | Sync design, failover, conflict resolution, rejection reconciliation (§4.4). Catalog import appears in pull as ordinary product/category/inventory rows. `sales.server_received_at` is pull metadata. |
+| `DATA-MODEL.md` | ✅ Done — v1.8, 0 open decisions | Database schema for SQLite and PostgreSQL. Users provisioning closed. `sales.server_received_at` SQLite mirror closed. |
+| `ARCHITECTURE.md` | ✅ Done — v1.6 | System architecture. §10 is the dashboard may/may-not list. |
+| `API-SPEC.md` | ✅ Done — v1.7, 0 open questions | This document |
 | `HARDWARE-INTEGRATION.md` | ✅ Complete — v1.0 | Scanner, printer protocols and Flutter integration |
-| `UI-GUIDELINES.md` | ✅ Complete — v1.1 | Design rules for non-technical users. Void copy and deferred-rejection notice: `SYNC-PROTOCOL.md` §11.2. |
-| `CODING-STANDARDS.md` | 🟡 Written at v1.3 — **§5.8 does not conform to §1.4**; §4.3 vs `SYNC-PROTOCOL.md` §2.5 also outstanding | Repo layout, layering, naming, testing. See the conformance table in §1.4. |
-| `REQUIREMENTS.md` | 🔲 Not written | Formal in-scope / out-of-scope for v1 |
+| `UI-GUIDELINES.md` | ✅ Complete — v1.2 | Design rules for non-technical users. Void copy and deferred-rejection notice: `SYNC-PROTOCOL.md` §11.2. |
+| `CODING-STANDARDS.md` | ✅ Done — v1.4 | Repo layout, layering, naming, testing. §5.8 matches §1.4; §4.3 matches `SYNC-PROTOCOL.md` §2.5. |
+| `REQUIREMENTS.md` | ✅ Done — v1.5 | Formal in-scope / out-of-scope for v1 |
 
-**What 🟡 means in this table.** `CODING-STANDARDS.md` (v1.3) is written in full, but two conformance items remain open: §5.8 vs §1.4 of this document, and §4.3 vs `SYNC-PROTOCOL.md` §2.5. Treat 🟡 as "written, reconciliation outstanding", not as a completion mark.
+`CODING-STANDARDS.md` v1.4 closes the two conformance items previously marked 🟡.

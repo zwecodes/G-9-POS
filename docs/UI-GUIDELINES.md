@@ -1,9 +1,11 @@
 # UI-GUIDELINES.md
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Status:** Complete  
 **Last updated:** 2026-09-04  
 **Author:** Architecture Team
+
+**Changelog since 1.1:** §2 secondary-user sentence matches `ARCHITECTURE.md` §10: dashboard shop-data access stays read-only; administrative UI is staff create, device revoke, and CSV catalog import. Void copy and deferred-rejection notice are unchanged.
 
 **Changelog since 1.0:** Records the honest-optimistic-void decision (`SYNC-PROTOCOL.md` §11.2). §5.5 no longer promises that stock will definitely be returned or that a void cannot be undone. Confirmation before voiding is unchanged. `CANCELLED` is the history rendering of `sales.status = voided` and is absent after a rejected void restores `completed`. §6 adds the deferred-rejection notice on the existing sync status screen — never a popup or modal, never blocking a sale. No pending badge and no new UI state.
 
@@ -21,7 +23,7 @@ Every UI decision in G9POS is measured against this. If a screen requires readin
 
 **Primary user:** A middle-aged woman running a motorcycle accessories shop alone in a small Myanmar town. She is not tech-savvy. She may be serving a customer and handling cash simultaneously. She cannot afford to be confused by the app even for 5 seconds.
 
-**Secondary user:** The remote owner (Zwe) in Thailand — tech-savvy, using iPhone or laptop browser, read-only access.
+**Secondary user:** The remote owner (Zwe) in Thailand — tech-savvy, using iPhone or laptop browser. Shop-data access is read-only. Administrative UI is limited to staff account creation, device revocation, and CSV catalog import (`ARCHITECTURE.md` §10).
 
 Design for the primary user first, always. The secondary user can handle complexity.
 

@@ -31,120 +31,40 @@ Each feature folder: `providers/`, `repositories/`, `screens/`, `widgets/`
 UI → Provider → Repository → Drift DAO. Never skip layers.
 
 ```dart
-// Repository: local SQLite first, then sync queue
 class ProductRepository {
   Future<void> saveProduct(ProductsCompanion product) async {
-    await _db.productDao.upsert(product);           // 1. local first
-    await _syncQueue.enqueue(                        // 2. then queue
+    await _db.productDao.upsert(product);
+    await _syncQueue.enqueue(
       eventType: product.id.present ? 'PRODUCT_UPDATED' : 'PRODUCT_CREATED',
       payload: product.toJson(),
-      referenceId: product.id.value,
+      referenceId: null, // standalone — never product.id (SYNC-PROTOCOL.md §2.5)
     );
   }
-  Stream<List<Product>> watchAll() =>               // reads from local SQLite
+  Stream<List<Product>> watchAll() =>
     _db.productDao.watchAllActive();
 }
-
-// Provider
-final productRepositoryProvider = Provider<ProductRepository>((ref) =>
-  ProductRepository(ref.watch(appDatabaseProvider), ref.watch(syncQueueDaoProvider)));
-
-// Screen — never imports Drift or DAO directly
-class ProductListScreen extends ConsumerWidget {
-  Widget build(BuildContext context, WidgetRef ref) {
-    return ref.watch(productListProvider).when(
-      data: (list) => ProductGrid(products: list),
-      loading: () => const ProductGridSkeleton(),
-      error: (e, _) => const ErrorMessage(message: 'Could not load products'),
-    );
-  }
-}
 ```
+
+Standalone events: `referenceId: null`. Grouped events (sale + inventory, void, receipt): share the causal parent's id.
 
 ## Flutter — Naming
-```dart
-// Files: snake_case
-product_repository.dart
-
-// Classes: PascalCase
-class ProductRepository {}
-
-// Variables/functions: camelCase
-final productList = <Product>[];
-
-// Constants: camelCase with k prefix
-const kScanThresholdMs = 100;
-
-// Providers: end with Provider
-final productListProvider = StreamProvider<List<Product>>(...);
-```
+Files: snake_case. Classes: PascalCase. Variables: camelCase. Providers end with `Provider`.
 
 ## Flutter — Error Handling
-```dart
-// ✅ Correct — catch, log, plain language state
-Future<void> saveProduct(ProductsCompanion product) async {
-  try {
-    await _repository.saveProduct(product);
-  } on DriftException catch (e, stack) {
-    _logger.error('save product failed', error: e, stackTrace: stack);
-    state = state.copyWith(error: 'Could not save product. Try again.');
-  } catch (e, stack) {
-    _logger.error('unexpected error', error: e, stackTrace: stack);
-    state = state.copyWith(error: 'Something went wrong. Try again.');
-  }
-}
-
-// ❌ Wrong
-await _repository.saveProduct(product); // unhandled — crashes
-```
-
-Every async function touching DB, network, or hardware is wrapped in try/catch. Never rethrow from a UI action handler.
+Catch, log, plain-language state. Never rethrow from a UI action handler. Never show `exception.toString()`.
 
 ## Flutter — Drift Rules
-```dart
-// Every read filters soft-deleted records
-Stream<List<Product>> watchAllActive() =>
-  (select(products)..where((p) => p.deletedAt.isNull())).watch();
-
-// Every inventory_events read also filters rejected
-Future<int> computeStock(String productId) async =>
-  (selectOnly(inventoryEvents)
-    ..addColumns([inventoryEvents.quantityDelta.sum()])
-    ..where(inventoryEvents.productId.equals(productId))
-    ..where(inventoryEvents.rejectedAt.isNull())) // required — G1
-  .map((r) => r.read(inventoryEvents.quantityDelta.sum()) ?? 0)
-  .getSingle();
-
-// Never use auto-increment — always UUID
-TextColumn get id => text()();  // UUID set by app before insert
-```
-
-## Flutter — Logging
-```dart
-// Use logger package — never print() in production
-final _logger = Logger('ProductRepository');
-_logger.info('Product saved', {'id': product.id});
-_logger.error('Failed', error: e, stackTrace: stack);
-```
-
-## Go — Structure
-```
-services/backend/
-  cmd/server/main.go           ← entry point only
-  internal/
-    auth/     sync/     products/    inventory/
-    sales/    expenses/ suppliers/   reports/
-    devices/  dashboard/
-  pkg/
-    db/           ← PostgreSQL connection, migrations
-    middleware/   ← JWT, logger, rate limit
-    timezone/     ← ShopTimezone constant
-    response/     ← standard JSON response helpers
-```
+- Filter `deletedAt.isNull()` on tables that have `deletedAt`
+- Every inventory stock sum filters `rejectedAt.isNull()` (G1)
+- Never auto-increment — UUID strings
+- `rejectedAt` only while `syncedAt` is null; DAO + CHECK constraint, not `assert()`
 
 ## Go — Three-Layer Pattern
+Handler: HTTP only. Service: business logic. Repository: SQL only.
+
+Response helpers serialize `API-SPEC.md` §1.4: `{ data, meta }` / `{ error, meta }`. No `success` flag. `error` is an object with `code`, `message`, `field`.
+
 ```go
-// Handler: HTTP only — no SQL, no business logic
 func (h *Handler) GetProducts(c *gin.Context) {
   products, err := h.service.GetAllProducts(c.Request.Context())
   if err != nil {
@@ -154,87 +74,16 @@ func (h *Handler) GetProducts(c *gin.Context) {
   }
   response.OK(c, products)
 }
-
-// Service: business logic — no HTTP, no SQL
-func (s *Service) GetAllProducts(ctx context.Context) ([]Product, error) {
-  return s.repo.FindAllActive(ctx)
-}
-
-// Repository: SQL only — no HTTP, no business logic
-func (r *Repository) FindAllActive(ctx context.Context) ([]Product, error) {
-  var products []Product
-  if err := r.db.SelectContext(ctx, &products,
-    `SELECT * FROM products WHERE deleted_at IS NULL ORDER BY name`); err != nil {
-    return nil, fmt.Errorf("FindAllActive: %w", err)
-  }
-  return products, nil
-}
 ```
 
-## Go — Error Handling
-```go
-// ✅ Correct — wrap with context, translate at handler
-// Repository
-return nil, fmt.Errorf("products.FindAllActive: %w", err)
-// Service
-return nil, fmt.Errorf("GetAllProducts: %w", err)
-// Handler
-slog.Error("get products failed", "error", err)
-response.InternalError(c, "Could not load products")
-
-// ❌ Wrong
-products, _ := r.db.SelectContext(...)           // ignore error
-c.JSON(500, gin.H{"error": err.Error()})         // expose internal error
-fmt.Println("error:", err)                        // never println in production
-```
-
-## Go — Logging
-```go
-// Use slog (Go 1.21+) — never fmt.Println in production
-slog.Info("sync batch processed",
-  "device_id", deviceID,
-  "event_count", len(events),
-  "duration_ms", elapsed.Milliseconds(),
-)
-slog.Error("sync event failed",
-  "event_id", event.ID,
-  "event_type", event.EventType,
-  "error", err,
-)
-```
-
-## Go — Naming
-```go
-// Files: snake_case
-product_repository.go
-
-// Packages: single lowercase word
-package sync
-
-// Exported: PascalCase
-type ProductRepository struct {}
-func NewProductRepository(db *sqlx.DB) *ProductRepository {}
-
-// Unexported: camelCase
-type syncBatch struct {}
-func (s *SyncService) processEvent(e SyncEvent) error {}
-
-// Constants
-const ShopTimezone = "Asia/Yangon"   // exported
-const maxBatchSize = 50              // unexported
-```
+Never `c.JSON(500, gin.H{"error": err.Error()})`.
 
 ## Go — Shop Timezone
 ```go
-// Always use timezone package — never time.Local or time.Now() raw
 timezone.NowInShop()
 timezone.IsSameShopDay(a, b)
-timezone.ShopDateString(t)
-
-// ❌ Wrong
-time.Now()                              // device/server local
-sale.CreatedAt.Day() != time.Now().Day() // wrong timezone comparison
 ```
+Never `time.Now()` for business-day logic.
 
 ## Testing Targets
 | Code | Minimum coverage |
@@ -244,8 +93,6 @@ sale.CreatedAt.Day() != time.Now().Day() // wrong timezone comparison
 | Inventory stock computation | 90% |
 | Everything else | 70% |
 
-Test files mirror source structure. Go tests in same directory as source. Flutter tests in `test/` mirroring `lib/`.
-
 ## Git / Commits
 ```
 feat(pos): add barcode scan to cart
@@ -253,4 +100,3 @@ fix(sync): prevent event group split across batches
 docs(api): resolve open questions
 ```
 Format: `type(scope): lowercase description`, present tense, no period.
-One logical change per commit. Commit before every new Cursor session.

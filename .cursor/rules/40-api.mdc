@@ -6,13 +6,15 @@ alwaysApply: false
 
 # G9POS — API Rules
 
-## The Only Write Endpoint
+Authoritative wire contract: `docs/API-SPEC.md`. These rules summarize it; they must not contradict it.
+
+## Shop-data write endpoint
 ```
 POST /v1/sync/events
 ```
-This is the only endpoint that writes shop data. No exceptions.
+The POS never creates products, sales, voids, expenses, suppliers, or orders via REST.
 
-The following do NOT exist and must never be created:
+Do not create:
 - `POST /v1/products`
 - `POST /v1/sales`
 - `POST /v1/sales/{id}/void`
@@ -21,27 +23,40 @@ The following do NOT exist and must never be created:
 - `POST /v1/orders`
 - `PUT` or `PATCH` on any shop-data resource
 
-## Unauthenticated Endpoints (only two)
+## Closed REST writes (not POS CRUD)
 ```
-POST /v1/auth/login    — username + password → JWT pair
-POST /v1/setup         — first-owner bootstrap, empty-users only, deploy-time only
+POST /v1/auth/login | refresh | logout
+PATCH /v1/devices/{id}          — rename only
+POST /v1/setup                  — first owner, empty-users, deploy-time
+POST /v1/users                  — create staff (owner JWT or dashboard_viewer)
+POST /v1/devices/{id}/revoke    — owner JWT or dashboard_viewer
+POST /v1/catalog/import         — CSV; applies PRODUCT_CREATED / CATEGORY_CREATED / INVENTORY_ADJUSTED
 ```
-All other endpoints require a valid JWT. No exceptions.
 
-## Setup Endpoint Rules
-- Only callable when `users` table has zero rows
-- Empty-table check and insert are atomic (single transaction or unique constraint)
-- Must be completed before API is exposed to the public internet
+## Unauthenticated endpoints (only two)
+```
+POST /v1/auth/login
+POST /v1/setup         — first-owner bootstrap, empty-users only, atomic, no JWT issued
+```
+All other endpoints require a valid JWT.
+
+## Setup
+- Only callable when `users` has zero rows (including soft-deleted)
+- Empty-table check and insert are one transaction
+- Completed before API is exposed to the public internet
 - Rate limited: 5 req/min/IP
-- Returns `409 SETUP_ALREADY_COMPLETE` if users already exist
+- `409 SETUP_ALREADY_COMPLETE` if users already exist
+- Then the owner uses `POST /v1/auth/login` as today
 
-## Auth Model
+## Auth model
 ```
 Owner:            username + password → JWT (role: owner)
-Staff:            PIN unlock on device — not a server login factor
-dashboard_viewer: separate JWT claim for remote admin/viewer access
+Staff:            PIN unlock on device — not a server login factor; no username/password
+dashboard_viewer: login_context=dashboard on the same login endpoint
 ```
-PIN hashes are stored server-side and distributed via pull — but PIN is never a server login factor. `POST /v1/auth/login` always requires username + password.
+PIN hashes are stored on `users.pin` and pulled to devices. PIN is never a server login factor.
+
+`dashboard_viewer` may call only: `POST /v1/users`, `POST /v1/devices/{id}/revoke`, `POST /v1/catalog/import`. It cannot submit sync events.
 
 ## JWT
 - Access token: 15 minutes
@@ -50,19 +65,25 @@ PIN hashes are stored server-side and distributed via pull — but PIN is never 
 - Offline grace: expired access token with valid refresh token → load app, queue refresh
 - Device revocation: `POST /v1/devices/{id}/revoke` — sets `devices.revoked_at`
 
-## Standard Response Format
+## Standard response format — API-SPEC.md §1.4
 ```go
 type APIResponse struct {
-    Success bool        `json:"success"`
-    Data    interface{} `json:"data,omitempty"`
-    Error   string      `json:"error,omitempty"`
+    Data  interface{} `json:"data,omitempty"`
+    Error *APIError   `json:"error,omitempty"`
+    Meta  Meta        `json:"meta"`
+}
+type APIError struct {
+    Code    string `json:"code"`
+    Message string `json:"message"`
+    Field   string `json:"field,omitempty"`
 }
 ```
-Always use `response.OK()`, `response.BadRequest()`, `response.Unauthorized()`, `response.InternalError()` — never `c.JSON()` directly.
+Success: `{ data, meta }`. Error: `{ error, meta }`. No `success` flag. `meta.request_id` on every response. `error` is an object, never a string.
 
-## Handler Pattern
+Always use `response.OK()`, `response.BadRequest()`, `response.Unauthorized()`, `response.InternalError()` — never `c.JSON()` a different shape.
+
+## Handler pattern
 ```go
-// Handler: parse → call service → respond. No business logic.
 func (h *Handler) GetProducts(c *gin.Context) {
     products, err := h.service.GetAllProducts(c.Request.Context())
     if err != nil {
@@ -75,7 +96,7 @@ func (h *Handler) GetProducts(c *gin.Context) {
 ```
 Never query the database from a handler. Never put business logic in a handler.
 
-## Sync Events Endpoint
+## Sync events
 ```
 POST /v1/sync/events
 Body: { device_id, events: [...] }
@@ -83,49 +104,40 @@ Response: { accepted: [...], rejected: [...], conflicts: [...], stock_correction
 ```
 Each event group is applied atomically. WebSocket broadcast fires only after transaction commits.
 
-## GET Endpoints (reads only)
+`EXPENSE_CREATED`: owner and staff. `EXPENSE_UPDATED` / `EXPENSE_DELETED`: owner only.
+
+## Catalog import
+`POST /v1/catalog/import` — owner JWT or `dashboard_viewer`. Validate entire CSV; one transaction; no partial apply. Server UUIDs. `reference_id` NULL on every generated event. Devices receive rows via `GET /v1/sync/pull`.
+
+## GET endpoints (reads)
 ```
-GET /v1/products          — all active products
-GET /v1/sync/pull         — changes since last_sync_at
-GET /v1/reports/daily     — daily summary
-GET /v1/reports/range     — date range report
-GET /v1/sales             — sales history
-GET /v1/devices           — device list
+GET /v1/products
+GET /v1/users
+GET /v1/sync/pull
+GET /v1/reports/daily-summary
+GET /v1/reports/range
+GET /v1/sales
+GET /v1/expenses          — owner, staff, dashboard
+GET /v1/devices
 ```
 
-## Dashboard-Only Admin Endpoints
-```
-POST /v1/users            — create staff account (owner JWT or dashboard_viewer)
-POST /v1/devices/{id}/revoke — revoke device access
-```
-These are the only two write endpoints that are not `POST /v1/sync/events`. They are administrative, not shop-data writes.
-
-## WebSocket
+## WebSocket — API-SPEC.md §11
 - Dashboard clients only — never POS app
-- Path: `/ws/dashboard`
-- Pushes: `sale.created`, `stock.updated`, `device.status`
+- Path: `wss://api.g9pos.com/ws?token=<access_token>`
+- Pushes: `sale.created`, `sale.voided`, `stock.low`, `stock.negative`, `device.sync_status`, `device.activated`
 - If WebSocket drops: dashboard falls back to polling `GET /v1/sync/pull` every 30s
+- Receive-only — no client → server writes
 - Never load-bearing for POS operation
 
-## Error Response Rules
-- Never expose raw Go errors to the client
-- Never expose stack traces
+## Error response rules
+- Never expose raw Go errors or stack traces to the client
 - Error message is plain language, one sentence
 - Internal errors logged with full context server-side
-```go
-// ✅ Correct
-slog.Error("sync event failed", "event_id", event.ID, "error", err)
-response.InternalError(c, "Could not process sync events")
 
-// ❌ Wrong
-c.JSON(500, gin.H{"error": err.Error()})
-```
-
-## Shop Timezone in API
+## Shop timezone
 ```go
-// All same-day checks use shop timezone
 if !timezone.IsSameShopDay(sale.ServerReceivedAt, time.Now()) {
     return ErrVoidWindowClosed
 }
-// Never: sale.CreatedAt.Day() != time.Now().Day()
 ```
+Never: `sale.CreatedAt.Day() != time.Now().Day()`
