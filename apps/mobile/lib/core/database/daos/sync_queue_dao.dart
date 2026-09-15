@@ -36,6 +36,13 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .get();
 
+  Future<SyncQueueData?> getById(String id) =>
+      (select(syncQueue)..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  Future<List<SyncQueueData>> getByReferenceId(String referenceId) =>
+      (select(syncQueue)..where((t) => t.referenceId.equals(referenceId)))
+          .get();
+
   Future<void> markSynced(String id, int syncedAt) =>
       (update(syncQueue)..where((t) => t.id.equals(id))).write(
         SyncQueueCompanion(syncedAt: Value(syncedAt)),

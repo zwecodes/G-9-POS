@@ -51,4 +51,9 @@ class InventoryEventDao extends DatabaseAccessor<AppDatabase>
             (e) => e.referenceId.equals(referenceId) & e.syncedAt.isNull(),
           ))
           .write(InventoryEventsCompanion(rejectedAt: Value(now)));
+
+  Future<void> markSynced(String eventId, int now) =>
+      (update(inventoryEvents)
+            ..where((e) => e.id.equals(eventId) & e.rejectedAt.isNull()))
+          .write(InventoryEventsCompanion(syncedAt: Value(now)));
 }
