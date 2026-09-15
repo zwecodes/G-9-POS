@@ -4,15 +4,11 @@ import 'dart:io';
 
 import 'package:logger/logger.dart';
 
+import '../auth/auth_constants.dart';
 import '../database/app_database.dart';
 import 'sync_batch.dart';
 import 'sync_rejection_handler.dart';
 
-/// CODING-STANDARDS.md §8 — never hardcode a production host.
-const String kApiUrl = String.fromEnvironment(
-  'API_URL',
-  defaultValue: 'http://localhost:8080',
-);
 const String kSyncEventsPath = '/v1/sync/events';
 
 Uri syncEventsUri() => Uri.parse('$kApiUrl$kSyncEventsPath');
