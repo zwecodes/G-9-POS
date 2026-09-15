@@ -6924,6 +6924,19 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_sync_queue_reference_id',
     'CREATE INDEX idx_sync_queue_reference_id ON sync_queue (reference_id)',
   );
+  late final ProductDao productDao = ProductDao(this as AppDatabase);
+  late final CategoryDao categoryDao = CategoryDao(this as AppDatabase);
+  late final InventoryEventDao inventoryEventDao = InventoryEventDao(
+    this as AppDatabase,
+  );
+  late final SaleDao saleDao = SaleDao(this as AppDatabase);
+  late final SaleItemDao saleItemDao = SaleItemDao(this as AppDatabase);
+  late final ExpenseDao expenseDao = ExpenseDao(this as AppDatabase);
+  late final SupplierDao supplierDao = SupplierDao(this as AppDatabase);
+  late final SupplierOrderDao supplierOrderDao = SupplierOrderDao(
+    this as AppDatabase,
+  );
+  late final SyncQueueDao syncQueueDao = SyncQueueDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();

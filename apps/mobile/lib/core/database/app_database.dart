@@ -1,5 +1,14 @@
 import 'package:drift/drift.dart';
 
+import 'daos/category_dao.dart';
+import 'daos/expense_dao.dart';
+import 'daos/inventory_event_dao.dart';
+import 'daos/product_dao.dart';
+import 'daos/sale_dao.dart';
+import 'daos/sale_item_dao.dart';
+import 'daos/supplier_dao.dart';
+import 'daos/supplier_order_dao.dart';
+import 'daos/sync_queue_dao.dart';
 import 'tables/categories_table.dart';
 import 'tables/expenses_table.dart';
 import 'tables/inventory_events_table.dart';
@@ -27,6 +36,17 @@ part 'app_database.g.dart';
     SupplierOrders,
     SupplierOrderItems,
     SyncQueue,
+  ],
+  daos: [
+    ProductDao,
+    CategoryDao,
+    InventoryEventDao,
+    SaleDao,
+    SaleItemDao,
+    ExpenseDao,
+    SupplierDao,
+    SupplierOrderDao,
+    SyncQueueDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
