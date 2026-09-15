@@ -18,14 +18,17 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
     String? referenceId,
     required int createdAt,
   }) {
-    return into(syncQueue).insert(
-      SyncQueueCompanion.insert(
-        id: id,
-        eventType: eventType,
-        payload: payload,
-        deviceId: deviceId,
+    return into(syncQueue).insertOnConflictUpdate(
+      SyncQueueCompanion(
+        id: Value(id),
+        eventType: Value(eventType),
+        payload: Value(payload),
+        deviceId: Value(deviceId),
         referenceId: Value(referenceId),
-        createdAt: createdAt,
+        createdAt: Value(createdAt),
+        syncedAt: const Value(null),
+        retryCount: const Value(0),
+        lastError: const Value(null),
       ),
     );
   }

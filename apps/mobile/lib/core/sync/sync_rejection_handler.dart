@@ -155,6 +155,7 @@ class SyncRejectionHandler {
 
   bool _shouldRevertSale(Set<String> eventTypes) =>
       eventTypes.contains(SyncEventType.saleCreated) ||
+      eventTypes.contains(SyncEventType.saleVoided) ||
       eventTypes.contains(SyncEventType.inventoryVoided);
 
   String _saleId(RejectedEvent rejection) =>

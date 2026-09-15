@@ -6,11 +6,14 @@ class TokenCache {
   TokenCache({
     FlutterSecureStorage? storage,
     int Function()? nowMs,
+    Map<String, String>? memory,
   })  : _storage = storage ?? const FlutterSecureStorage(),
-        _nowMs = nowMs ?? _defaultNowMs;
+        _nowMs = nowMs ?? _defaultNowMs,
+        _memory = memory;
 
   final FlutterSecureStorage _storage;
   final int Function() _nowMs;
+  final Map<String, String>? _memory;
 
   static int _defaultNowMs() => DateTime.now().millisecondsSinceEpoch;
 
@@ -21,37 +24,58 @@ class TokenCache {
     required String userId,
     required String userRole,
   }) async {
-    await _storage.write(key: kAccessTokenKey, value: accessToken);
-    await _storage.write(key: kRefreshTokenKey, value: refreshToken);
-    await _storage.write(key: kTokenExpiresAtKey, value: '$expiresAt');
-    await _storage.write(key: kUserIdKey, value: userId);
-    await _storage.write(key: kUserRoleKey, value: userRole);
+    await _write(kAccessTokenKey, accessToken);
+    await _write(kRefreshTokenKey, refreshToken);
+    await _write(kTokenExpiresAtKey, '$expiresAt');
+    await _write(kUserIdKey, userId);
+    await _write(kUserRoleKey, userRole);
   }
 
-  Future<String?> getAccessToken() => _storage.read(key: kAccessTokenKey);
+  Future<String?> getAccessToken() => _read(kAccessTokenKey);
 
-  Future<String?> getRefreshToken() => _storage.read(key: kRefreshTokenKey);
+  Future<String?> getRefreshToken() => _read(kRefreshTokenKey);
 
   Future<bool> isAccessTokenValid() async {
     final token = await getAccessToken();
     if (token == null || token.isEmpty) return false;
-    final raw = await _storage.read(key: kTokenExpiresAtKey);
+    final raw = await _read(kTokenExpiresAtKey);
     if (raw == null || raw.isEmpty) return false;
     final expiresAt = int.tryParse(raw);
     if (expiresAt == null) return false;
     return _nowMs() < expiresAt;
   }
 
-  Future<String?> getUserId() => _storage.read(key: kUserIdKey);
+  Future<String?> getUserId() => _read(kUserIdKey);
 
-  Future<String?> getUserRole() => _storage.read(key: kUserRoleKey);
+  Future<String?> getUserRole() => _read(kUserRoleKey);
 
   /// Sign-out. Does not touch [kDeviceIdKey].
   Future<void> clearTokens() async {
-    await _storage.delete(key: kAccessTokenKey);
-    await _storage.delete(key: kRefreshTokenKey);
-    await _storage.delete(key: kTokenExpiresAtKey);
-    await _storage.delete(key: kUserIdKey);
-    await _storage.delete(key: kUserRoleKey);
+    await _delete(kAccessTokenKey);
+    await _delete(kRefreshTokenKey);
+    await _delete(kTokenExpiresAtKey);
+    await _delete(kUserIdKey);
+    await _delete(kUserRoleKey);
+  }
+
+  Future<String?> _read(String key) async {
+    if (_memory != null) return _memory[key];
+    return _storage.read(key: key);
+  }
+
+  Future<void> _write(String key, String value) async {
+    if (_memory != null) {
+      _memory[key] = value;
+      return;
+    }
+    await _storage.write(key: key, value: value);
+  }
+
+  Future<void> _delete(String key) async {
+    if (_memory != null) {
+      _memory.remove(key);
+      return;
+    }
+    await _storage.delete(key: key);
   }
 }

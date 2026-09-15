@@ -20,12 +20,33 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   Future<Sale?> getById(String id) =>
       (select(sales)..where((s) => s.id.equals(id))).getSingleOrNull();
 
+  Future<int> countAll() async {
+    final countExp = sales.id.count();
+    final query = selectOnly(sales)..addColumns([countExp]);
+    return (await query.getSingle()).read(countExp) ?? 0;
+  }
+
   Future<void> upsert(SalesCompanion sale) =>
       into(sales).insertOnConflictUpdate(sale);
 
   Future<void> markSynced(String id, int syncedAt) =>
       (update(sales)..where((s) => s.id.equals(id))).write(
         SalesCompanion(syncedAt: Value(syncedAt)),
+      );
+
+  Future<void> markVoided({
+    required String id,
+    required int voidedAt,
+    required String voidedBy,
+    required String voidReason,
+  }) =>
+      (update(sales)..where((s) => s.id.equals(id))).write(
+        SalesCompanion(
+          status: const Value('voided'),
+          voidedAt: Value(voidedAt),
+          voidedBy: Value(voidedBy),
+          voidReason: Value(voidReason),
+        ),
       );
 
   /// SYNC-PROTOCOL.md §4.4 / §11.2 — restore a locally voided sale.

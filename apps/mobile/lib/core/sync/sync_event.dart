@@ -17,6 +17,7 @@ abstract final class SyncEventType {
   static const inventoryReturned = 'INVENTORY_RETURNED';
 
   static const saleCreated = 'SALE_CREATED';
+  static const saleVoided = 'SALE_VOIDED';
   static const expenseCreated = 'EXPENSE_CREATED';
   static const expenseUpdated = 'EXPENSE_UPDATED';
   static const expenseDeleted = 'EXPENSE_DELETED';

@@ -9,13 +9,18 @@ class DeviceIdService {
   DeviceIdService({
     FlutterSecureStorage? storage,
     Uuid? uuid,
+    String? seedId,
   })  : _storage = storage ?? const FlutterSecureStorage(),
-        _uuid = uuid ?? const Uuid();
+        _uuid = uuid ?? const Uuid(),
+        _seedId = seedId;
 
   final FlutterSecureStorage _storage;
   final Uuid _uuid;
+  final String? _seedId;
 
   Future<String> getOrCreateDeviceId() async {
+    if (_seedId != null && _seedId.isNotEmpty) return _seedId;
+
     final existing = await _storage.read(key: kDeviceIdKey);
     if (existing != null && existing.isNotEmpty) return existing;
 
