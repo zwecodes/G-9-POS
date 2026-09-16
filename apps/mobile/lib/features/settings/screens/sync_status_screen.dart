@@ -32,9 +32,7 @@ class SyncStatusScreen extends ConsumerWidget {
           PrimaryButton(
             label: 'Sync now',
             onPressed: () async {
-              await ref.read(syncFlusherProvider).flush();
-              ref.read(lastSyncAtMsProvider.notifier).state =
-                  DateTime.now().millisecondsSinceEpoch;
+              await ref.read(syncRuntimeProvider).syncNow();
             },
           ),
           const SizedBox(height: AppSpacing.xl),

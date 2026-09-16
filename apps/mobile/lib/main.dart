@@ -4,6 +4,7 @@ import 'package:timezone/data/latest.dart' as tzdata;
 
 import 'core/database/connection.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/providers/auth_providers.dart';
 import 'shared/providers/app_providers.dart';
 import 'shared/router/app_router.dart';
 
@@ -26,6 +27,17 @@ class G9PosApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(syncRuntimeProvider);
+    ref.listen(isOnlineProvider, (previous, next) {
+      next.whenData((online) {
+        if (online) ref.read(syncRuntimeProvider).onOnline();
+      });
+    });
+    ref.listen(sessionProvider, (previous, next) {
+      if (next.hasJwt && previous?.hasJwt != true) {
+        ref.read(syncRuntimeProvider).onOnline();
+      }
+    });
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
       title: 'G9POS',

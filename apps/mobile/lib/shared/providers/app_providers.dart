@@ -8,8 +8,12 @@ import '../../core/auth/device_id_service.dart';
 import '../../core/auth/pin_service.dart';
 import '../../core/auth/token_cache.dart';
 import '../../core/database/app_database.dart';
+import '../../core/sync/sync_cursor.dart';
 import '../../core/sync/sync_flusher.dart';
+import '../../core/sync/sync_pull_applier.dart';
+import '../../core/sync/sync_puller.dart';
 import '../../core/sync/sync_rejection_handler.dart';
+import '../../core/sync/sync_runtime.dart';
 import '../../core/utils/uuid_generator.dart';
 
 /// Overridden in `main()` and in tests. Never opens a file from the default.
@@ -79,7 +83,41 @@ final syncFlusherProvider = Provider<SyncFlusher>((ref) {
   );
 });
 
+final syncCursorProvider = Provider<SyncCursor>((ref) => SyncCursor());
+
 final lastSyncAtMsProvider = StateProvider<int?>((ref) => null);
+
+final syncPullerProvider = Provider<SyncPuller>((ref) {
+  final tokens = ref.watch(tokenCacheProvider);
+  final devices = ref.watch(deviceIdServiceProvider);
+  return SyncPuller(
+    applier: SyncPullApplier(
+      db: ref.watch(appDatabaseProvider),
+      logger: ref.watch(appLoggerProvider),
+      nowMs: ref.watch(nowMsProvider),
+    ),
+    cursor: ref.watch(syncCursorProvider),
+    accessToken: tokens.getAccessToken,
+    deviceId: devices.getOrCreateDeviceId,
+    logger: ref.watch(appLoggerProvider),
+    nowMs: ref.watch(nowMsProvider),
+    onCursor: (ms) {
+      ref.read(lastSyncAtMsProvider.notifier).state = ms == 0 ? null : ms;
+    },
+  );
+});
+
+final syncRuntimeProvider = Provider<SyncRuntime>((ref) {
+  final runtime = SyncRuntime(
+    flusher: ref.watch(syncFlusherProvider),
+    puller: ref.watch(syncPullerProvider),
+    hasJwt: () => true,
+    logger: ref.watch(appLoggerProvider),
+  );
+  runtime.start();
+  ref.onDispose(runtime.dispose);
+  return runtime;
+});
 
 final pendingSyncCountProvider = StreamProvider<int>((ref) {
   return ref.watch(appDatabaseProvider).syncQueueDao.watchPendingCount();
