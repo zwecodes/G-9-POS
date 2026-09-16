@@ -39,6 +39,17 @@ class InventoryRepository {
         );
   }
 
+  Stream<Map<String, int>> watchStockByProduct() {
+    return _db.select(_db.inventoryEvents).watch().asyncMap((_) async {
+      final products = await _db.productDao.getAllActive();
+      final map = <String, int>{};
+      for (final product in products) {
+        map[product.id] = await _db.inventoryEventDao.computeStock(product.id);
+      }
+      return map;
+    });
+  }
+
   Future<List<InventoryEvent>> listForProduct(String productId) {
     return (_db.select(_db.inventoryEvents)
           ..where((e) => e.productId.equals(productId))

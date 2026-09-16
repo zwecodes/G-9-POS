@@ -1,7 +1,18 @@
+import 'dart:io';
+
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import 'app_database.dart';
 
-/// File-backed opener is wired in `main()` (Phase 8). Tests override
-/// the database provider with [openMemoryDatabase].
 AppDatabase openMemoryDatabase() => AppDatabase(NativeDatabase.memory());
+
+AppDatabase openFileDatabase() {
+  return AppDatabase(LazyDatabase(() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File(p.join(dir.path, 'g9pos.sqlite'));
+    return NativeDatabase.createInBackground(file);
+  }));
+}

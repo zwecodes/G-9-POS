@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 
@@ -76,4 +77,25 @@ final syncFlusherProvider = Provider<SyncFlusher>((ref) {
     logger: ref.watch(appLoggerProvider),
     nowMs: ref.watch(nowMsProvider),
   );
+});
+
+final lastSyncAtMsProvider = StateProvider<int?>((ref) => null);
+
+final pendingSyncCountProvider = StreamProvider<int>((ref) {
+  return ref.watch(appDatabaseProvider).syncQueueDao.watchPendingCount();
+});
+
+final isOnlineProvider = StreamProvider<bool>((ref) async* {
+  final connectivity = Connectivity();
+  List<ConnectivityResult> current;
+  try {
+    current = await connectivity.checkConnectivity();
+  } catch (_) {
+    yield true;
+    return;
+  }
+  yield current.any((r) => r != ConnectivityResult.none);
+  await for (final results in connectivity.onConnectivityChanged) {
+    yield results.any((r) => r != ConnectivityResult.none);
+  }
 });

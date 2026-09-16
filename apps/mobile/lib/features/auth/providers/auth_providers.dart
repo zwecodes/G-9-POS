@@ -120,6 +120,17 @@ class SessionNotifier extends StateNotifier<SessionState> {
     state = state.copyWith(clearOperator: true, clearError: true);
   }
 
+  void unlockAsCachedUser() {
+    final userId = state.jwtUserId;
+    final role = state.jwtUserRole;
+    if (userId == null || userId.isEmpty) return;
+    state = state.copyWith(
+      operatorId: userId,
+      operatorRole: role,
+      clearError: true,
+    );
+  }
+
   Future<void> signOut() async {
     await _repo.signOut();
     state = const SessionState();
@@ -153,4 +164,8 @@ final appIdentityProvider = Provider<AppIdentity>((ref) {
 
 final unlockableUsersProvider = FutureProvider<List<User>>((ref) {
   return ref.watch(authRepositoryProvider).listUnlockableUsers();
+});
+
+final sessionBootstrapProvider = FutureProvider<void>((ref) async {
+  await ref.read(sessionProvider.notifier).restore();
 });

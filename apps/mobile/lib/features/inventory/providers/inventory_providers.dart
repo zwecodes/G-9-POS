@@ -19,7 +19,6 @@ final productStockProvider =
   return ref.watch(inventoryRepositoryProvider).stockOf(productId);
 });
 
-final productStockStreamProvider =
-    StreamProvider.family<int, String>((ref, productId) {
-  return ref.watch(inventoryRepositoryProvider).watchStock(productId);
+final stockByProductProvider = StreamProvider<Map<String, int>>((ref) {
+  return ref.watch(inventoryRepositoryProvider).watchStockByProduct();
 });

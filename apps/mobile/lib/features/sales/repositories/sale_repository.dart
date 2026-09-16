@@ -26,10 +26,15 @@ class SaleLineInput {
 }
 
 class CompletedSale {
-  const CompletedSale({required this.id, required this.saleNumber});
+  const CompletedSale({
+    required this.id,
+    required this.saleNumber,
+    required this.totalAmountMmk,
+  });
 
   final String id;
   final String saleNumber;
+  final int totalAmountMmk;
 }
 
 class SaleRepository {
@@ -195,7 +200,11 @@ class SaleRepository {
           }
         });
 
-        return CompletedSale(id: saleId, saleNumber: saleNumber);
+        return CompletedSale(
+          id: saleId,
+          saleNumber: saleNumber,
+          totalAmountMmk: total,
+        );
       },
     );
   }
