@@ -61,7 +61,10 @@ class ApiClient {
     return _decode(response);
   }
 
-  Future<Map<String, dynamic>> getJson(String path) async {
+  Future<Map<String, dynamic>> getJson(
+    String path, {
+    Map<String, String>? query,
+  }) async {
     final token = await _accessToken();
     if (token == null || token.isEmpty) {
       throw const ApiException(
@@ -70,14 +73,26 @@ class ApiClient {
         statusCode: 401,
       );
     }
+    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
     final response = await _http.get(
-      Uri.parse('$baseUrl$path'),
+      uri,
       headers: {
         'Accept': 'application/json',
         'Authorization': 'Bearer $token',
       },
     );
     return _decode(response);
+  }
+
+  /// GET where `data` is a JSON array.
+  Future<List<dynamic>> getList(
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    final decoded = await getJson(path, query: query);
+    final data = decoded['data'];
+    if (data is List) return data;
+    return const [];
   }
 
   Future<Map<String, dynamic>> postMultipartFile({

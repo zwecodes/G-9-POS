@@ -5,6 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/catalog/screens/catalog_import_screen.dart';
 import '../../features/dashboard/screens/overview_screen.dart';
+import '../../features/devices/screens/devices_screen.dart';
+import '../../features/expenses/screens/expenses_history_screen.dart';
+import '../../features/sales/screens/sales_history_screen.dart';
+import '../../features/staff/screens/staff_screen.dart';
 import '../providers/app_providers.dart';
 import '../widgets/admin_shell.dart';
 
@@ -51,8 +55,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const OverviewScreen(),
           ),
           GoRoute(
+            path: '/sales',
+            builder: (context, state) => const SalesHistoryScreen(),
+          ),
+          GoRoute(
+            path: '/expenses',
+            builder: (context, state) => const ExpensesHistoryScreen(),
+          ),
+          GoRoute(
             path: '/import',
             builder: (context, state) => const CatalogImportScreen(),
+          ),
+          GoRoute(
+            path: '/staff',
+            builder: (context, state) => const StaffScreen(),
+          ),
+          GoRoute(
+            path: '/devices',
+            builder: (context, state) => const DevicesScreen(),
           ),
         ],
       ),

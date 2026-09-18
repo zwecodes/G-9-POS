@@ -112,4 +112,130 @@ class DashboardRepository {
     );
     return CatalogImportResult.fromJson(data);
   }
+
+  Future<List<AdminUser>> listUsers() async {
+    final rows = await _api.getList('/v1/users');
+    return [
+      for (final row in rows)
+        if (row is Map<String, dynamic>) AdminUser.fromJson(row),
+    ];
+  }
+
+  Future<AdminUser> createStaff({
+    required String name,
+    required String pin,
+  }) async {
+    final data = await _api.postJson(
+      '/v1/users',
+      {'name': name.trim(), 'pin': pin},
+      auth: true,
+    );
+    return AdminUser.fromJson(data);
+  }
+
+  Future<List<DeviceSummary>> listDevices() async {
+    final rows = await _api.getList('/v1/devices');
+    return [
+      for (final row in rows)
+        if (row is Map<String, dynamic>) DeviceSummary.fromJson(row),
+    ];
+  }
+
+  Future<void> revokeDevice(String id) async {
+    await _api.postJson('/v1/devices/$id/revoke', const {}, auth: true);
+  }
+
+  Future<List<SaleSummary>> listSales() async {
+    final rows = await _api.getList('/v1/sales');
+    return [
+      for (final row in rows)
+        if (row is Map<String, dynamic>) SaleSummary.fromJson(row),
+    ];
+  }
+
+  Future<List<ExpenseSummary>> listExpenses() async {
+    final rows = await _api.getList('/v1/expenses');
+    return [
+      for (final row in rows)
+        if (row is Map<String, dynamic>) ExpenseSummary.fromJson(row),
+    ];
+  }
+}
+
+class AdminUser {
+  const AdminUser({
+    required this.id,
+    required this.name,
+    required this.role,
+    this.username,
+  });
+
+  final String id;
+  final String name;
+  final String role;
+  final String? username;
+
+  factory AdminUser.fromJson(Map<String, dynamic> json) {
+    return AdminUser(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      role: json['role'] as String? ?? '',
+      username: json['username'] as String?,
+    );
+  }
+}
+
+class SaleSummary {
+  const SaleSummary({
+    required this.id,
+    required this.saleNumber,
+    required this.totalAmountMmk,
+    required this.status,
+    required this.createdAtMs,
+    required this.operatorId,
+  });
+
+  final String id;
+  final String saleNumber;
+  final int totalAmountMmk;
+  final String status;
+  final int createdAtMs;
+  final String operatorId;
+
+  factory SaleSummary.fromJson(Map<String, dynamic> json) {
+    return SaleSummary(
+      id: json['id'] as String? ?? '',
+      saleNumber: json['sale_number'] as String? ?? '',
+      totalAmountMmk: (json['total_amount_mmk'] as num?)?.toInt() ?? 0,
+      status: json['status'] as String? ?? '',
+      createdAtMs: (json['created_at'] as num?)?.toInt() ?? 0,
+      operatorId: json['operator_id'] as String? ?? '',
+    );
+  }
+}
+
+class ExpenseSummary {
+  const ExpenseSummary({
+    required this.id,
+    required this.category,
+    required this.amountMmk,
+    required this.expenseDate,
+    this.note,
+  });
+
+  final String id;
+  final String category;
+  final int amountMmk;
+  final String expenseDate;
+  final String? note;
+
+  factory ExpenseSummary.fromJson(Map<String, dynamic> json) {
+    return ExpenseSummary(
+      id: json['id'] as String? ?? '',
+      category: json['category'] as String? ?? '',
+      amountMmk: (json['amount_mmk'] as num?)?.toInt() ?? 0,
+      expenseDate: json['expense_date'] as String? ?? '',
+      note: json['note'] as String?,
+    );
+  }
 }

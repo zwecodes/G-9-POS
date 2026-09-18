@@ -10,3 +10,19 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
 final overviewProvider = FutureProvider<DashboardOverview>((ref) {
   return ref.watch(dashboardRepositoryProvider).overview();
 });
+
+final usersProvider = FutureProvider<List<AdminUser>>((ref) {
+  return ref.watch(dashboardRepositoryProvider).listUsers();
+});
+
+final devicesProvider = FutureProvider<List<DeviceSummary>>((ref) {
+  return ref.watch(dashboardRepositoryProvider).listDevices();
+});
+
+final salesProvider = FutureProvider<List<SaleSummary>>((ref) {
+  return ref.watch(dashboardRepositoryProvider).listSales();
+});
+
+final expensesProvider = FutureProvider<List<ExpenseSummary>>((ref) {
+  return ref.watch(dashboardRepositoryProvider).listExpenses();
+});
