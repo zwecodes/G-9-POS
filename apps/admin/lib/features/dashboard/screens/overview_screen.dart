@@ -8,13 +8,19 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/ui_primitives.dart';
 import '../providers/dashboard_providers.dart';
+import '../providers/live_feed_providers.dart';
 
 class OverviewScreen extends ConsumerWidget {
   const OverviewScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the socket alive while the shell is open.
+    ref.watch(liveFeedProvider);
     final overview = ref.watch(overviewProvider);
+    final live = ref.watch(liveFeedProvider);
+    final moneyFmt = NumberFormat('#,###');
+
     return overview.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => EmptyState(
@@ -24,7 +30,7 @@ class OverviewScreen extends ConsumerWidget {
             : 'Could not load the dashboard. Try again.',
       ),
       data: (data) {
-        final money = NumberFormat('#,###').format(data.revenueMmk);
+        final money = moneyFmt.format(data.revenueMmk);
         return RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(overviewProvider);
@@ -33,6 +39,25 @@ class OverviewScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.circle,
+                    size: AppSpacing.sm,
+                    color: live.connected
+                        ? AppColors.success
+                        : AppColors.warning,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    live.connected
+                        ? 'Live updates connected'
+                        : 'Live updates reconnecting…',
+                    style: AppTextStyles.caption,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
               Text('Shop day ${data.date}', style: AppTextStyles.sectionHeader),
               const SizedBox(height: AppSpacing.sm),
               Text('$money MMK', style: AppTextStyles.saleTotal),
@@ -52,6 +77,48 @@ class OverviewScreen extends ConsumerWidget {
                 value: data.activeDevice?.name ?? 'None active',
                 color: AppColors.textPrimary,
               ),
+              const SizedBox(height: AppSpacing.xl),
+              const Text('Live sales', style: AppTextStyles.sectionHeader),
+              const SizedBox(height: AppSpacing.sm),
+              if (live.recentSales.isEmpty)
+                Text(
+                  'New sales from the shop will appear here when online.',
+                  style: AppTextStyles.caption,
+                )
+              else
+                for (final sale in live.recentSales)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(sale.saleNumber, style: AppTextStyles.body),
+                    subtitle: Text(
+                      DateFormat('HH:mm:ss').format(
+                        DateTime.fromMillisecondsSinceEpoch(
+                          sale.createdAtMs,
+                          isUtc: true,
+                        ).toLocal(),
+                      ),
+                      style: AppTextStyles.caption,
+                    ),
+                    trailing: Text(
+                      '${moneyFmt.format(sale.totalAmountMmk)} MMK',
+                      style: AppTextStyles.body,
+                    ),
+                  ),
+              if (live.notices.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xl),
+                const Text('Alerts', style: AppTextStyles.sectionHeader),
+                const SizedBox(height: AppSpacing.sm),
+                for (final notice in live.notices)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: Text(
+                      notice,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ),
+              ],
               const SizedBox(height: AppSpacing.xl),
               const Text('Devices', style: AppTextStyles.sectionHeader),
               const SizedBox(height: AppSpacing.sm),

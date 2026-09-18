@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/catalog/screens/catalog_import_screen.dart';
+import '../../features/dashboard/providers/live_feed_providers.dart';
 import '../../features/dashboard/screens/overview_screen.dart';
 import '../../features/devices/screens/devices_screen.dart';
 import '../../features/expenses/screens/expenses_history_screen.dart';
@@ -48,7 +49,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const LoginScreen(),
       ),
       ShellRoute(
-        builder: (context, state, child) => AdminShell(child: child),
+        builder: (context, state, child) {
+          // Ensure live feed starts whenever the signed-in shell is shown.
+          return _LiveShell(child: AdminShell(child: child));
+        },
         routes: [
           GoRoute(
             path: '/',
@@ -86,5 +90,17 @@ class _Splash extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(child: CircularProgressIndicator());
+  }
+}
+
+class _LiveShell extends ConsumerWidget {
+  const _LiveShell({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(liveFeedProvider);
+    return child;
   }
 }
