@@ -22,3 +22,16 @@ final productStockProvider =
 final stockByProductProvider = StreamProvider<Map<String, int>>((ref) {
   return ref.watch(inventoryRepositoryProvider).watchStockByProduct();
 });
+
+final stockLevelsProvider = StreamProvider<List<ProductStock>>((ref) {
+  return ref.watch(inventoryRepositoryProvider).watchStockLevels();
+});
+
+final lowStockProvider = StreamProvider<List<ProductStock>>((ref) {
+  return ref.watch(inventoryRepositoryProvider).watchLowStock();
+});
+
+final productStockLevelProvider =
+    FutureProvider.family<ProductStock?, String>((ref, productId) {
+  return ref.watch(inventoryRepositoryProvider).stockLevelFor(productId);
+});

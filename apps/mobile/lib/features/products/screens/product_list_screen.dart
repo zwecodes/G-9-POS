@@ -21,7 +21,15 @@ class ProductListScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Products'),
-        actions: const [SyncStatusButton()],
+        actions: [
+          if (isOwner)
+            IconButton(
+              tooltip: 'Inventory',
+              icon: const Icon(Icons.warehouse_outlined),
+              onPressed: () => context.push('/products/inventory'),
+            ),
+          const SyncStatusButton(),
+        ],
       ),
       body: Column(
         children: [

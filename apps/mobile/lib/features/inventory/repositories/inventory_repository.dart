@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 import 'package:logger/logger.dart';
 
@@ -8,6 +10,28 @@ import '../../../core/sync/sync_event.dart';
 import '../../../core/utils/repository_exception.dart';
 import '../../../core/utils/repository_write.dart';
 import '../../../core/utils/uuid_generator.dart';
+
+/// Stock is always computed — never stored on the product row.
+class ProductStock {
+  const ProductStock({
+    required this.product,
+    required this.currentStock,
+  });
+
+  final Product product;
+  final int currentStock;
+
+  /// Zero or below — shown in red, never hidden.
+  bool get isOutOfStock => currentStock <= 0;
+
+  /// Below or at threshold but still positive.
+  bool get isLowStock =>
+      currentStock > 0 && currentStock <= product.lowStockThreshold;
+
+  bool get isNegative => currentStock < 0;
+
+  bool get isHealthy => currentStock > product.lowStockThreshold;
+}
 
 class InventoryRepository {
   InventoryRepository({
@@ -48,6 +72,70 @@ class InventoryRepository {
       }
       return map;
     });
+  }
+
+  /// Active products with stock from `SUM(quantity_delta)` excluding rejected.
+  Future<List<ProductStock>> getStockLevels() async {
+    final products = await _db.productDao.getAllActive();
+    final levels = <ProductStock>[];
+    for (final product in products) {
+      final stock = await _db.inventoryEventDao.computeStock(product.id);
+      levels.add(ProductStock(product: product, currentStock: stock));
+    }
+    levels.sort(
+      (a, b) => a.product.name.toLowerCase().compareTo(b.product.name.toLowerCase()),
+    );
+    return levels;
+  }
+
+  Stream<List<ProductStock>> watchStockLevels() {
+    late final StreamController<List<ProductStock>> controller;
+    var busy = false;
+
+    Future<void> emit() async {
+      if (busy || controller.isClosed) return;
+      busy = true;
+      try {
+        final levels = await getStockLevels();
+        if (!controller.isClosed) controller.add(levels);
+      } catch (error, stack) {
+        if (!controller.isClosed) controller.addError(error, stack);
+      } finally {
+        busy = false;
+      }
+    }
+
+    StreamSubscription<List<Product>>? productsSub;
+    StreamSubscription<List<InventoryEvent>>? eventsSub;
+
+    controller = StreamController<List<ProductStock>>(
+      onListen: () {
+        emit();
+        productsSub = _db.productDao.watchAllActive().listen((_) => emit());
+        eventsSub =
+            _db.select(_db.inventoryEvents).watch().listen((_) => emit());
+      },
+      onCancel: () async {
+        await productsSub?.cancel();
+        await eventsSub?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  Stream<List<ProductStock>> watchLowStock() {
+    return watchStockLevels().map(
+      (levels) =>
+          levels.where((row) => row.isLowStock || row.isOutOfStock).toList(),
+    );
+  }
+
+  Future<ProductStock?> stockLevelFor(String productId) async {
+    final product = await _db.productDao.getActiveById(productId);
+    if (product == null) return null;
+    final stock = await _db.inventoryEventDao.computeStock(productId);
+    return ProductStock(product: product, currentStock: stock);
   }
 
   Future<List<InventoryEvent>> listForProduct(String productId) {

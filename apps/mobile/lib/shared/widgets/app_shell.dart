@@ -16,7 +16,8 @@ class AppShell extends ConsumerWidget {
     final location = GoRouterState.of(context).uri.path;
     final hideNav = location.contains('/checkout') ||
         location.contains('/complete') ||
-        location.contains('/products/');
+        location.contains('/products/') ||
+        location.contains('/inventory');
 
     return Scaffold(
       body: navigationShell,

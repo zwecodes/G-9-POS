@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/pin_screen.dart';
+import '../../features/inventory/screens/inventory_screen.dart';
+import '../../features/inventory/screens/stock_adjust_screen.dart';
 import '../../features/pos/screens/checkout_screen.dart';
 import '../../features/pos/screens/pos_screen.dart';
 import '../../features/pos/screens/sale_complete_screen.dart';
@@ -89,6 +91,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'new',
                     builder: (context, state) => const ProductFormScreen(),
+                  ),
+                  GoRoute(
+                    path: 'inventory',
+                    builder: (context, state) => const InventoryScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':productId',
+                        builder: (context, state) => StockAdjustScreen(
+                          productId: state.pathParameters['productId']!,
+                        ),
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: ':id',
