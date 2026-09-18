@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/providers/auth_providers.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/pin_screen.dart';
+import '../../features/expenses/screens/expense_form_screen.dart';
+import '../../features/expenses/screens/expense_list_screen.dart';
 import '../../features/inventory/screens/inventory_screen.dart';
 import '../../features/inventory/screens/stock_adjust_screen.dart';
 import '../../features/pos/screens/checkout_screen.dart';
@@ -131,6 +133,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'sync',
                     builder: (context, state) => const SyncStatusScreen(),
+                  ),
+                  GoRoute(
+                    path: 'expenses',
+                    builder: (context, state) => const ExpenseListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'new',
+                        builder: (context, state) => const ExpenseFormScreen(),
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: 'sales',

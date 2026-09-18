@@ -30,4 +30,8 @@ class ShopDateUtils {
   static String formatShopDateTime(int unixMs) {
     return DateFormat('yyyy-MM-dd HH:mm').format(fromUnixMs(unixMs));
   }
+
+  /// Calendar day in the shop timezone — for `expense_date` / void day checks.
+  static String todayShopDateString() =>
+      DateFormat('yyyy-MM-dd').format(nowInShop());
 }

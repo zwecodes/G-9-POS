@@ -17,7 +17,7 @@ class AppShell extends ConsumerWidget {
     final hideNav = location.contains('/checkout') ||
         location.contains('/complete') ||
         location.contains('/products/') ||
-        location.contains('/inventory');
+        location.contains('/settings/');
 
     return Scaffold(
       body: navigationShell,

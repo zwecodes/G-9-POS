@@ -9,11 +9,25 @@ part 'expense_dao.g.dart';
 class ExpenseDao extends DatabaseAccessor<AppDatabase> with _$ExpenseDaoMixin {
   ExpenseDao(super.db);
 
-  Stream<List<Expense>> watchAllActive() =>
-      (select(expenses)..where((e) => e.deletedAt.isNull())).watch();
+  Stream<List<Expense>> watchAllActive() {
+    return (select(expenses)
+          ..where((e) => e.deletedAt.isNull())
+          ..orderBy([
+            (e) => OrderingTerm.desc(e.expenseDate),
+            (e) => OrderingTerm.desc(e.createdAt),
+          ]))
+        .watch();
+  }
 
-  Future<List<Expense>> getAllActive() =>
-      (select(expenses)..where((e) => e.deletedAt.isNull())).get();
+  Future<List<Expense>> getAllActive() {
+    return (select(expenses)
+          ..where((e) => e.deletedAt.isNull())
+          ..orderBy([
+            (e) => OrderingTerm.desc(e.expenseDate),
+            (e) => OrderingTerm.desc(e.createdAt),
+          ]))
+        .get();
+  }
 
   Future<Expense?> getById(String id) =>
       (select(expenses)
