@@ -5,6 +5,7 @@ import 'package:logger/logger.dart';
 
 import '../auth/auth_constants.dart';
 import 'sync_cursor.dart';
+import 'sync_flusher.dart';
 import 'sync_pull_applier.dart';
 import 'sync_pull_payload.dart';
 
@@ -32,6 +33,8 @@ class SyncPuller {
     required SyncCursor cursor,
     required Future<String?> Function() accessToken,
     required Future<String> Function() deviceId,
+    Future<bool> Function()? accessTokenValid,
+    Future<void> Function()? refresh,
     Logger? logger,
     int Function()? nowMs,
     SyncPullGetter? getter,
@@ -41,6 +44,8 @@ class SyncPuller {
         _cursor = cursor,
         _accessToken = accessToken,
         _deviceId = deviceId,
+        _accessTokenValid = accessTokenValid,
+        _refresh = refresh,
         _log = logger ?? Logger(),
         _nowMs = nowMs ?? _defaultNowMs,
         _getter = getter ?? _defaultGetter,
@@ -51,6 +56,8 @@ class SyncPuller {
   final SyncCursor _cursor;
   final Future<String?> Function() _accessToken;
   final Future<String> Function() _deviceId;
+  final Future<bool> Function()? _accessTokenValid;
+  final Future<void> Function()? _refresh;
   final Logger _log;
   final int Function() _nowMs;
   final SyncPullGetter _getter;
@@ -67,31 +74,70 @@ class SyncPuller {
     if (_pulling) return;
     _pulling = true;
     try {
-      final token = await _accessToken();
-      if (token == null || token.isEmpty) return;
+      var token = await _usableAccessToken();
+      if (token == null) return;
       final deviceId = await _deviceId();
       var lastSync = await _cursor.getLastSyncAtMs();
+      var refreshed = false;
       for (var page = 0; page < 50; page++) {
-        final body = await _getter(
-          uri: syncPullUri(lastSyncAtMs: lastSync, deviceId: deviceId),
-          accessToken: token,
-        ).timeout(_httpTimeout);
-        final payload = parsePullPayload(body);
-        if (payload.isEmpty) {
+        try {
+          final body = await _getter(
+            uri: syncPullUri(lastSyncAtMs: lastSync, deviceId: deviceId),
+            accessToken: token,
+          ).timeout(_httpTimeout);
+          final payload = parsePullPayload(body);
+          if (payload.isEmpty) {
+            lastSync = _advance(lastSync, payload);
+            await _saveCursor(lastSync);
+            return;
+          }
+          await _applier.apply(payload);
           lastSync = _advance(lastSync, payload);
           await _saveCursor(lastSync);
+          if (!payload.hitPageLimit) return;
+        } on SyncHttpException catch (error) {
+          if (error.statusCode == 401 && !refreshed) {
+            refreshed = true;
+            token = await _usableAccessToken(forceRefresh: true);
+            if (token == null) return;
+            page -= 1;
+            continue;
+          }
+          if (error.statusCode == 401) return;
+          _log.e('Sync pull failed', error: error);
           return;
         }
-        await _applier.apply(payload);
-        lastSync = _advance(lastSync, payload);
-        await _saveCursor(lastSync);
-        if (!payload.hitPageLimit) return;
       }
     } catch (error, stack) {
       _log.e('Sync pull failed', error: error, stackTrace: stack);
     } finally {
       _pulling = false;
     }
+  }
+
+  Future<String?> _usableAccessToken({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      if (_accessTokenValid == null) {
+        final token = await _accessToken();
+        if (token == null || token.isEmpty) return null;
+        return token;
+      }
+      if (await _accessTokenValid()) {
+        return _accessToken();
+      }
+    }
+    if (_refresh == null) return null;
+    try {
+      await _refresh();
+    } catch (_) {
+      return null;
+    }
+    if (_accessTokenValid != null && !await _accessTokenValid()) {
+      return null;
+    }
+    final token = await _accessToken();
+    if (token == null || token.isEmpty) return null;
+    return token;
   }
 
   int _advance(int previous, PullPayload payload) {
@@ -126,8 +172,14 @@ class SyncPuller {
       }
       final response = await request.close();
       final responseBody = await utf8.decodeStream(response);
+      if (response.statusCode == 401) {
+        throw const SyncHttpException(401, 'Authentication required');
+      }
       if (response.statusCode != 200) {
-        throw HttpException('Sync pull HTTP ${response.statusCode}', uri: uri);
+        throw SyncHttpException(
+          response.statusCode,
+          'Could not load updates',
+        );
       }
       return responseBody;
     } finally {

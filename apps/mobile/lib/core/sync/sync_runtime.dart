@@ -10,18 +10,15 @@ class SyncRuntime {
   SyncRuntime({
     required SyncFlusher flusher,
     required SyncPuller puller,
-    required bool Function() hasJwt,
     Logger? logger,
     Duration interval = const Duration(seconds: 60),
   })  : _flusher = flusher,
         _puller = puller,
-        _hasJwt = hasJwt,
         _log = logger ?? Logger(),
         _interval = interval;
 
   final SyncFlusher _flusher;
   final SyncPuller _puller;
-  final bool Function() _hasJwt;
   final Logger _log;
   final Duration _interval;
 
@@ -42,7 +39,6 @@ class SyncRuntime {
   }
 
   Future<void> syncNow() async {
-    if (!_hasJwt()) return;
     try {
       await _flusher.flush();
       await _puller.pull();

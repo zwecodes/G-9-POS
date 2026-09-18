@@ -34,7 +34,7 @@ class G9PosApp extends ConsumerWidget {
       });
     });
     ref.listen(sessionProvider, (previous, next) {
-      if (next.hasJwt && previous?.hasJwt != true) {
+      if (next.isUnlocked && previous?.isUnlocked != true) {
         ref.read(syncRuntimeProvider).onOnline();
       }
     });

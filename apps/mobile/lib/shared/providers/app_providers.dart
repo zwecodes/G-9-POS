@@ -98,6 +98,8 @@ final syncPullerProvider = Provider<SyncPuller>((ref) {
     ),
     cursor: ref.watch(syncCursorProvider),
     accessToken: tokens.getAccessToken,
+    accessTokenValid: tokens.isAccessTokenValid,
+    refresh: () => ref.read(authServiceProvider).refreshToken(),
     deviceId: devices.getOrCreateDeviceId,
     logger: ref.watch(appLoggerProvider),
     nowMs: ref.watch(nowMsProvider),
@@ -111,7 +113,6 @@ final syncRuntimeProvider = Provider<SyncRuntime>((ref) {
   final runtime = SyncRuntime(
     flusher: ref.watch(syncFlusherProvider),
     puller: ref.watch(syncPullerProvider),
-    hasJwt: () => true,
     logger: ref.watch(appLoggerProvider),
   );
   runtime.start();

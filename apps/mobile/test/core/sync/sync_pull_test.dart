@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:g9pos/core/database/app_database.dart';
 import 'package:g9pos/core/sync/sync_cursor.dart';
+import 'package:g9pos/core/sync/sync_flusher.dart';
 import 'package:g9pos/core/sync/sync_pull_applier.dart';
 import 'package:g9pos/core/sync/sync_pull_payload.dart';
 import 'package:g9pos/core/sync/sync_puller.dart';
@@ -245,6 +246,42 @@ void main() {
     expect(await cursor.getLastSyncAtMs(), 1000);
     expect(await repos.db.productDao.getById('p-0'), isNot(null));
     expect(await repos.db.productDao.getById('p-last'), isNot(null));
+  });
+
+  test('puller skips expired tokens without calling the server', () async {
+    final repos = openTestRepos();
+    addTearDown(repos.close);
+    var calls = 0;
+    final puller = SyncPuller(
+      applier: SyncPullApplier(db: repos.db, nowMs: () => 1),
+      cursor: SyncCursor(memory: {}),
+      accessToken: () async => 'expired',
+      accessTokenValid: () async => false,
+      deviceId: () async => 'device-b',
+      getter: ({required uri, required accessToken}) async {
+        calls += 1;
+        throw const SyncHttpException(401, 'Authentication required');
+      },
+    );
+
+    await puller.pull();
+    expect(calls, 0);
+  });
+
+  test('puller does not throw on HTTP 401', () async {
+    final repos = openTestRepos();
+    addTearDown(repos.close);
+    final puller = SyncPuller(
+      applier: SyncPullApplier(db: repos.db, nowMs: () => 1),
+      cursor: SyncCursor(memory: {}),
+      accessToken: () async => 'stale',
+      deviceId: () async => 'device-b',
+      getter: ({required uri, required accessToken}) async {
+        throw const SyncHttpException(401, 'Authentication required');
+      },
+    );
+
+    await puller.pull();
   });
 
   test('puller does not throw when the server is unreachable', () async {
