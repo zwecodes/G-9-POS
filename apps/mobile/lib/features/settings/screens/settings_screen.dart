@@ -54,6 +54,14 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
+                  title: const Text('Hardware', style: AppTextStyles.body),
+                  onTap: () => context.push('/settings/hardware'),
+                ),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
                   title: Text(
                     session.operatorName ?? 'Signed in',
                     style: AppTextStyles.caption,

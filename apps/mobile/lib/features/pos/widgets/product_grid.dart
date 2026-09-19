@@ -10,36 +10,46 @@ import '../../../core/utils/repository_exception.dart';
 import '../../../shared/widgets/ui_primitives.dart';
 import '../../inventory/providers/inventory_providers.dart';
 import '../../products/providers/product_providers.dart';
+import '../providers/barcode_listener_provider.dart';
 import '../providers/cart_provider.dart';
+import 'hardware_status_bar.dart';
+import 'manual_barcode_field.dart';
 
 class ProductGrid extends ConsumerWidget {
   const ProductGrid({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(posBarcodeListenerProvider);
     final products = ref.watch(sellableProductListProvider);
     final query = ref.watch(posSearchQueryProvider).trim().toLowerCase();
     final stocks = ref.watch(stockByProductProvider).valueOrNull ?? {};
+    final barcodeError = ref.watch(barcodeLookupErrorProvider);
 
     return Column(
       children: [
+        const HardwareStatusBar(),
+        const ManualBarcodeField(),
+        if (barcodeError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: ErrorText(barcodeError),
+          ),
         Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.sm,
+            AppSpacing.md,
+            AppSpacing.sm,
+          ),
           child: TextField(
             decoration: const InputDecoration(
-              labelText: 'Search or scan',
+              labelText: 'Search by name',
               prefixIcon: Icon(Icons.search),
             ),
-            onChanged: (value) async {
+            onChanged: (value) {
               ref.read(posSearchQueryProvider.notifier).state = value;
-              final trimmed = value.trim();
-              if (trimmed.isEmpty) return;
-              try {
-                await ref.read(cartProvider.notifier).addByBarcode(trimmed);
-                ref.read(posSearchQueryProvider.notifier).state = '';
-              } on RepositoryException {
-                // Not a full barcode — keep filtering by name.
-              }
+              ref.read(barcodeLookupErrorProvider.notifier).state = null;
             },
           ),
         ),
@@ -108,6 +118,7 @@ class _ProductCard extends ConsumerWidget {
         onTap: () {
           try {
             ref.read(cartProvider.notifier).addProduct(product);
+            ref.read(barcodeLookupErrorProvider.notifier).state = null;
           } on RepositoryException {
             // Inactive products are filtered from sellable list.
           }
@@ -136,22 +147,22 @@ class _ProductCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.cartItemName,
                   ),
-                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     CurrencyFormatter.format(product.priceMmk),
-                    style: AppTextStyles.cartItemPrice,
+                    style: AppTextStyles.caption,
+                  ),
+                  Text(
+                    'Stock $stock',
+                    style: AppTextStyles.caption.copyWith(
+                      color: stock <= 0
+                          ? AppColors.error
+                          : low
+                              ? AppColors.warning
+                              : AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
-              if (low)
-                const Positioned(
-                  top: 0,
-                  right: 0,
-                  child: CircleAvatar(
-                    radius: AppSpacing.xs,
-                    backgroundColor: AppColors.error,
-                  ),
-                ),
             ],
           ),
         ),
