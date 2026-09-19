@@ -1,0 +1,6 @@
+name,price_mmk,cost_price_mmk,barcode,category,unit,low_stock_threshold,initial_stock
+Yamaha Oil Filter,8500,5200,8850123456789,Filters,pcs,5,24
+Chain Lube 400ml,12000,7500,8850987654321,Lubricants,pcs,5,36
+Brake Pad Set Front,45000,28000,,Brakes,set,3,8
+LED Headlight Bulb H4,18000,11000,,Lighting,pcs,5,15
+Grip Rubber Soft,6500,3200,,Controls,pair,5,20
