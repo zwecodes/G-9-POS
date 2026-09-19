@@ -175,6 +175,17 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
                 style: AppTextStyles.caption,
               ),
             ),
+          const SizedBox(height: AppSpacing.md),
+          // Laptop / local testing escape hatch — shop owner still uses Done/Skip.
+          TextButton(
+            onPressed: _finish,
+            child: Text(
+              'Skip for now (testing)',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
         ],
       ),
     );

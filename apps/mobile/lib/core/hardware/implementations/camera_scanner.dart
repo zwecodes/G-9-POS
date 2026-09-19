@@ -3,8 +3,8 @@ import 'dart:async';
 import '../hardware_status.dart';
 import '../interfaces/scanner_interface.dart';
 
-/// Always disconnected — kept for tests and offline demos without HID.
-class StubScanner implements ScannerInterface {
+/// Post-launch camera barcode scanner (`mobile_scanner`) — HARDWARE-INTEGRATION.md §7.
+class CameraScanner implements ScannerInterface {
   final _controller = StreamController<String>.broadcast();
 
   @override
@@ -17,17 +17,14 @@ class StubScanner implements ScannerInterface {
   HardwareConnectionStatus get status => HardwareConnectionStatus.disconnected;
 
   @override
-  Future<bool> connect() async => false;
+  Future<bool> connect() async {
+    throw UnimplementedError(
+      'CameraScanner is post-launch — use Bluetooth HID or manual entry for v1.',
+    );
+  }
 
   @override
   Future<void> disconnect() async {}
-
-  /// Manual entry path (§4.4).
-  void submitBarcode(String barcode) {
-    final trimmed = barcode.trim();
-    if (trimmed.isEmpty) return;
-    _controller.add(trimmed);
-  }
 
   void dispose() {
     if (!_controller.isClosed) {

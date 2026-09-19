@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/hardware/hardware_provider.dart';
+import '../../../core/hardware/implementations/bluetooth_hid_scanner.dart';
 import '../../../core/hardware/implementations/stub_scanner.dart';
 import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -82,7 +83,9 @@ class _ManualBarcodeFieldState extends ConsumerState<ManualBarcodeField> {
     }
     ref.read(barcodeLookupErrorProvider.notifier).state = null;
     final scanner = ref.read(scannerProvider);
-    if (scanner is StubScanner) {
+    if (scanner is BluetoothHIDScanner) {
+      scanner.submitBarcode(raw);
+    } else if (scanner is StubScanner) {
       scanner.submitBarcode(raw);
     }
     _controller.clear();

@@ -875,7 +875,7 @@ abstract class AppLocalizations {
   /// No description provided for @hardwareHelp.
   ///
   /// In en, this message translates to:
-  /// **'Scanner and printer are not connected yet. Sales still work — type barcodes manually and reprint receipts from history after you pair hardware.'**
+  /// **'Pair the scanner and printer in Android Bluetooth settings first. Sales still work without them — type barcodes manually and reprint receipts from history.'**
   String get hardwareHelp;
 
   /// No description provided for @barcodeScanner.
@@ -893,8 +893,80 @@ abstract class AppLocalizations {
   /// No description provided for @hardwareTestsLater.
   ///
   /// In en, this message translates to:
-  /// **'Test buttons will appear here after Bluetooth pairing is added.'**
+  /// **'Use Test Scanner and Test Printer after pairing in Android Bluetooth settings.'**
   String get hardwareTestsLater;
+
+  /// No description provided for @testScanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Scanner'**
+  String get testScanner;
+
+  /// No description provided for @testPrinter.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Printer'**
+  String get testPrinter;
+
+  /// No description provided for @scannerTestWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanner ready — scan a barcode…'**
+  String get scannerTestWaiting;
+
+  /// No description provided for @scannerTestSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanner OK — read {barcode}'**
+  String scannerTestSuccess(String barcode);
+
+  /// No description provided for @scannerTestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanner test failed — pair in Bluetooth settings, then try again.'**
+  String get scannerTestFailed;
+
+  /// No description provided for @printerTestSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Test receipt sent to the printer.'**
+  String get printerTestSuccess;
+
+  /// No description provided for @printerTestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Print failed — check the printer and try again.'**
+  String get printerTestFailed;
+
+  /// No description provided for @printerTestDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'No printer connected — pair in Bluetooth settings, then try again.'**
+  String get printerTestDisconnected;
+
+  /// No description provided for @printerTestTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Printer did not respond — check power and try again.'**
+  String get printerTestTimeout;
+
+  /// No description provided for @printerTestPaperOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Printer is out of paper — add paper and try again.'**
+  String get printerTestPaperOut;
+
+  /// No description provided for @hardwareHidHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The scanner acts like a keyboard. After Test Scanner, scan any barcode to confirm.'**
+  String get hardwareHidHint;
+
+  /// No description provided for @hardwareConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get hardwareConnecting;
 
   /// No description provided for @changePinTitle.
   ///

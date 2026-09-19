@@ -6,6 +6,12 @@ const kSetupScannerDoneKey = 'g9pos_setup_scanner';
 const kSetupPrinterDoneKey = 'g9pos_setup_printer';
 const kSetupOtherDeviceKey = 'g9pos_setup_other_device';
 
+/// Pass `--dart-define=G9POS_DEV_SKIP_SETUP=true` to auto-complete first-run
+/// setup on app start (laptop / local testing only).
+const bool kDevSkipSetup =
+    String.fromEnvironment('G9POS_DEV_SKIP_SETUP', defaultValue: 'false') ==
+        'true';
+
 enum ChecklistMark { pending, done, skipped }
 
 ChecklistMark _parseMark(String? raw) {
@@ -75,6 +81,11 @@ class SetupChecklistNotifier extends StateNotifier<SetupChecklistState> {
   final FlutterSecureStorage _storage;
 
   Future<void> _restore() async {
+    if (kDevSkipSetup) {
+      await _storage.write(key: kSetupCompleteKey, value: '1');
+      state = const SetupChecklistState(loaded: true, complete: true);
+      return;
+    }
     final complete = await _storage.read(key: kSetupCompleteKey);
     final scanner = await _storage.read(key: kSetupScannerDoneKey);
     final printer = await _storage.read(key: kSetupPrinterDoneKey);

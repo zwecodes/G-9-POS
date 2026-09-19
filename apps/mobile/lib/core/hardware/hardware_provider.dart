@@ -1,25 +1,27 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'hardware_status.dart';
-import 'implementations/stub_label_printer.dart';
-import 'implementations/stub_receipt_printer.dart';
-import 'implementations/stub_scanner.dart';
+import 'implementations/bluetooth_hid_scanner.dart';
+import 'implementations/niimbot_printer.dart';
+import 'implementations/receipt_printer_factory.dart';
 import 'interfaces/label_printer_interface.dart';
 import 'interfaces/receipt_printer_interface.dart';
 import 'interfaces/scanner_interface.dart';
 
 final scannerProvider = Provider<ScannerInterface>((ref) {
-  final scanner = StubScanner();
+  final scanner = BluetoothHIDScanner();
   ref.onDispose(scanner.dispose);
   return scanner;
 });
 
 final receiptPrinterProvider = Provider<ReceiptPrinterInterface>((ref) {
-  return StubReceiptPrinter();
+  final created = createReceiptPrinter();
+  ref.onDispose(created.dispose);
+  return created.printer;
 });
 
 final labelPrinterProvider = Provider<LabelPrinterInterface>((ref) {
-  return StubLabelPrinter();
+  return NiimbotPrinter();
 });
 
 final scannerStatusProvider = Provider<HardwareConnectionStatus>((ref) {

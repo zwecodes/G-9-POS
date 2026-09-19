@@ -1,0 +1,11 @@
+G9POS deploy checklist (VPS) — do in order
+
+[ ] VPS provisioned (Docker + Compose installed)
+[ ] DNS A/AAAA → VPS; wait until it resolves
+[ ] Copy infrastructure/.env.example → .env; set strong JWT_SECRET and POSTGRES_PASSWORD
+[ ] docker compose -f infrastructure/docker-compose.yml --env-file infrastructure/.env up -d --build
+[ ] Run setupowner BEFORE public exposure (services/backend cmd/setupowner with OWNER_* env)
+[ ] Firewall: allow 80/443 only (SSH as needed); do not expose Postgres
+[ ] TLS: use nginx-tls.conf.example + Let's Encrypt when going public (keep HTTP-only for local)
+[ ] Mobile/admin builds: --dart-define=API_URL=https://your-api-host (never ship localhost)
+[ ] Smoke: login, catalog import, one sale sync from a device

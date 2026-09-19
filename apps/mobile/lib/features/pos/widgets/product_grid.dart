@@ -14,6 +14,7 @@ import '../../products/providers/product_providers.dart';
 import '../providers/barcode_listener_provider.dart';
 import '../providers/cart_provider.dart';
 import 'hardware_status_bar.dart';
+import 'hid_scanner_focus.dart';
 import 'manual_barcode_field.dart';
 
 class ProductGrid extends ConsumerWidget {
@@ -28,56 +29,57 @@ class ProductGrid extends ConsumerWidget {
     final stocks = ref.watch(stockByProductProvider).valueOrNull ?? {};
     final barcodeError = ref.watch(barcodeLookupErrorProvider);
 
-    return Column(
-      children: [
-        const HardwareStatusBar(),
-        const ManualBarcodeField(),
-        if (barcodeError != null)
+    return HidScannerFocus(
+      child: Column(
+        children: [
+          const HardwareStatusBar(),
+          const ManualBarcodeField(),
+          if (barcodeError != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              child: ErrorText(barcodeError),
+            ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-            child: ErrorText(barcodeError),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.sm,
-            AppSpacing.md,
-            AppSpacing.sm,
-          ),
-          child: TextField(
-            decoration: InputDecoration(
-              labelText: l10n.searchProducts,
-              prefixIcon: const Icon(Icons.search),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.sm,
             ),
-            onChanged: (value) {
-              ref.read(posSearchQueryProvider.notifier).state = value;
-              ref.read(barcodeLookupErrorProvider.notifier).state = null;
-            },
-          ),
-        ),
-        Expanded(
-          child: products.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => EmptyState(
-              icon: Icons.error_outline,
-              message: l10n.couldNotLoadProducts,
+            child: TextField(
+              decoration: InputDecoration(
+                labelText: l10n.searchProducts,
+                prefixIcon: const Icon(Icons.search),
+              ),
+              onChanged: (value) {
+                ref.read(posSearchQueryProvider.notifier).state = value;
+                ref.read(barcodeLookupErrorProvider.notifier).state = null;
+              },
             ),
-            data: (list) {
-              final filtered = query.isEmpty
-                  ? list
-                  : list.where((p) {
-                      return p.name.toLowerCase().contains(query) ||
-                          (p.barcode ?? '').toLowerCase().contains(query);
-                    }).toList();
-              if (filtered.isEmpty) {
-                return EmptyState(
-                  icon: Icons.search_off,
-                  message: context.l10n.noProductsFound,
-                );
-              }
-              final width = MediaQuery.sizeOf(context).width;
-              final columns = width >= AppBreakpoints.tablet ? 3 : 2;
-              return GridView.builder(
+          ),
+          Expanded(
+            child: products.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stack) => EmptyState(
+                icon: Icons.error_outline,
+                message: l10n.couldNotLoadProducts,
+              ),
+              data: (list) {
+                final filtered = query.isEmpty
+                    ? list
+                    : list.where((p) {
+                        return p.name.toLowerCase().contains(query) ||
+                            (p.barcode ?? '').toLowerCase().contains(query);
+                      }).toList();
+                if (filtered.isEmpty) {
+                  return EmptyState(
+                    icon: Icons.search_off,
+                    message: context.l10n.noProductsFound,
+                  );
+                }
+                final width = MediaQuery.sizeOf(context).width;
+                final columns = width >= AppBreakpoints.tablet ? 3 : 2;
+                return GridView.builder(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.md,
                   0,
@@ -101,6 +103,7 @@ class ProductGrid extends ConsumerWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }

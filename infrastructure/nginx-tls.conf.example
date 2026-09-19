@@ -1,0 +1,49 @@
+# Example HTTPS front for G9POS behind Let's Encrypt.
+# Do not replace nginx.conf until certs exist and DNS points here.
+#
+# Certbot (on the VPS), after DNS A/AAAA records resolve:
+#   apt install certbot python3-certbot-nginx   # or equivalent
+#   certbot certonly --nginx -d api.example.com
+# Cert paths (adjust domain):
+#   /etc/letsencrypt/live/api.example.com/fullchain.pem
+#   /etc/letsencrypt/live/api.example.com/privkey.pem
+#
+# Mount this file (or a copy) as the nginx site config and also mount:
+#   /etc/letsencrypt:/etc/letsencrypt:ro
+
+# Redirect HTTP → HTTPS (optional ACME challenge path if using webroot).
+server {
+    listen 80;
+    server_name api.example.com;
+
+    # location /.well-known/acme-challenge/ {
+    #     root /var/www/certbot;
+    # }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+    client_max_body_size 8m;
+
+    # ssl_certificate     /etc/letsencrypt/live/api.example.com/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+    # include /etc/letsencrypt/options-ssl-nginx.conf;
+    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        proxy_pass http://api:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 60s;
+    }
+}

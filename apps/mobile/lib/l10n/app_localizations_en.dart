@@ -425,7 +425,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get hardwareHelp =>
-      'Scanner and printer are not connected yet. Sales still work — type barcodes manually and reprint receipts from history after you pair hardware.';
+      'Pair the scanner and printer in Android Bluetooth settings first. Sales still work without them — type barcodes manually and reprint receipts from history.';
 
   @override
   String get barcodeScanner => 'Barcode scanner';
@@ -435,7 +435,51 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get hardwareTestsLater =>
-      'Test buttons will appear here after Bluetooth pairing is added.';
+      'Use Test Scanner and Test Printer after pairing in Android Bluetooth settings.';
+
+  @override
+  String get testScanner => 'Test Scanner';
+
+  @override
+  String get testPrinter => 'Test Printer';
+
+  @override
+  String get scannerTestWaiting => 'Scanner ready — scan a barcode…';
+
+  @override
+  String scannerTestSuccess(String barcode) {
+    return 'Scanner OK — read $barcode';
+  }
+
+  @override
+  String get scannerTestFailed =>
+      'Scanner test failed — pair in Bluetooth settings, then try again.';
+
+  @override
+  String get printerTestSuccess => 'Test receipt sent to the printer.';
+
+  @override
+  String get printerTestFailed =>
+      'Print failed — check the printer and try again.';
+
+  @override
+  String get printerTestDisconnected =>
+      'No printer connected — pair in Bluetooth settings, then try again.';
+
+  @override
+  String get printerTestTimeout =>
+      'Printer did not respond — check power and try again.';
+
+  @override
+  String get printerTestPaperOut =>
+      'Printer is out of paper — add paper and try again.';
+
+  @override
+  String get hardwareHidHint =>
+      'The scanner acts like a keyboard. After Test Scanner, scan any barcode to confirm.';
+
+  @override
+  String get hardwareConnecting => 'Connecting…';
 
   @override
   String get changePinTitle => 'Change PIN';

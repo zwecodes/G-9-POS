@@ -427,7 +427,7 @@ class AppLocalizationsMy extends AppLocalizations {
 
   @override
   String get hardwareHelp =>
-      'စကန်နာနှင့် ပရင်တာ မချိတ်ရသေးပါ။ ရောင်းချမှု လုပ်နိုင်ဆဲ — ဘားကုဒ် ရိုက်ထည့်နိုင်ပြီး နောက်မှ မှတ်တမ်းမှ ဘောင်ချာ ပြန်ထုတ်နိုင်သည်။';
+      'စကန်နာနှင့် ပရင်တာကို Android ဘလူးတုသ် ဆက်တင်တွင် အရင်ချိတ်ပါ။ မချိတ်လည်း ရောင်းနိုင်ဆဲ — ဘားကုဒ် ရိုက်ထည့်နိုင်ပြီး မှတ်တမ်းမှ ဘောင်ချာ ပြန်ထုတ်နိုင်သည်။';
 
   @override
   String get barcodeScanner => 'ဘားကုဒ် စကန်နာ';
@@ -437,7 +437,52 @@ class AppLocalizationsMy extends AppLocalizations {
 
   @override
   String get hardwareTestsLater =>
-      'ဘလူးတုသ် ချိတ်ဆက်မှု ထည့်ပြီးမှ စမ်းသပ် ခလုတ်များ ပေါ်ပါမည်။';
+      'ဘလူးတုသ်တွင် ချိတ်ပြီးနောက် စကန်နာ/ပရင်တာ စမ်းသပ် ခလုတ်များကို သုံးပါ။';
+
+  @override
+  String get testScanner => 'စကန်နာ စမ်းသပ်မည်';
+
+  @override
+  String get testPrinter => 'ပရင်တာ စမ်းသပ်မည်';
+
+  @override
+  String get scannerTestWaiting => 'စကန်နာ အဆင်သင့် — ဘားကုဒ် တစ်ခု စကန်ပါ…';
+
+  @override
+  String scannerTestSuccess(String barcode) {
+    return 'စကန်နာ အိုကေ — $barcode';
+  }
+
+  @override
+  String get scannerTestFailed =>
+      'စကန်နာ စမ်းသပ်မှု မအောင်မြင် — ဘလူးတုသ်တွင် ချိတ်ပြီး ထပ်ကြိုးစားပါ။';
+
+  @override
+  String get printerTestSuccess =>
+      'စမ်းသပ် ဘောင်ချာကို ပရင်တာသို့ ပို့ပြီးပါပြီ။';
+
+  @override
+  String get printerTestFailed =>
+      'ပရင့် မအောင်မြင် — ပရင်တာကို စစ်ပြီး ထပ်ကြိုးစားပါ။';
+
+  @override
+  String get printerTestDisconnected =>
+      'ပရင်တာ မချိတ်ရသေးပါ — ဘလူးတုသ်တွင် ချိတ်ပြီး ထပ်ကြိုးစားပါ။';
+
+  @override
+  String get printerTestTimeout =>
+      'ပရင်တာ တုံ့ပြန်ခြင်း မရှိ — ပါဝါ စစ်ပြီး ထပ်ကြိုးစားပါ။';
+
+  @override
+  String get printerTestPaperOut =>
+      'ပရင်တာ စက္ကူ ကုန်နေသည် — စက္ကူထည့်ပြီး ထပ်ကြိုးစားပါ။';
+
+  @override
+  String get hardwareHidHint =>
+      'စကန်နာသည် ကီးဘုတ်ကဲ့သို့ လုပ်ဆောင်သည်။ စမ်းသပ်ပြီးနောက် ဘားကုဒ် တစ်ခု စကန်ပါ။';
+
+  @override
+  String get hardwareConnecting => 'ချိတ်ဆက်နေသည်…';
 
   @override
   String get changePinTitle => 'PIN ပြောင်းမည်';

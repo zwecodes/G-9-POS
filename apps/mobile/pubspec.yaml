@@ -52,6 +52,8 @@ dependencies:
   path: ^1.9.1
   google_fonts: ^8.2.1
   http: ^1.6.0
+  flutter_bluetooth_serial: ^0.4.0
+  esc_pos_utils: ^1.1.0
 
 dev_dependencies:
   flutter_test:

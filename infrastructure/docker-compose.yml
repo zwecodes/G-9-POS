@@ -1,7 +1,7 @@
 # Local / VPS stack for G9POS (ARCHITECTURE.md §9).
 # Usage from repo root:
 #   cp infrastructure/.env.example infrastructure/.env
-#   # edit JWT_SECRET
+#   # edit JWT_SECRET and POSTGRES_PASSWORD
 #   docker compose -f infrastructure/docker-compose.yml --env-file infrastructure/.env up -d --build
 #
 # First owner (before public exposure):
@@ -14,7 +14,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: g9pos
-      POSTGRES_PASSWORD: g9pos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infrastructure/.env}
       POSTGRES_DB: g9pos
     volumes:
       - g9pos_pg:/var/lib/postgresql/data
@@ -30,7 +30,7 @@ services:
       dockerfile: Dockerfile
     environment:
       APP_ENV: production
-      DATABASE_URL: postgres://g9pos:g9pos@db:5432/g9pos?sslmode=disable
+      DATABASE_URL: postgres://g9pos:${POSTGRES_PASSWORD}@db:5432/g9pos?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in infrastructure/.env}
       SHOP_TIMEZONE: Asia/Yangon
       PORT: "8080"
