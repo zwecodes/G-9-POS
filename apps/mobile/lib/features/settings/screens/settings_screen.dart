@@ -62,6 +62,14 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
+                  title: const Text('Device setup checklist', style: AppTextStyles.body),
+                  onTap: () => context.push('/setup'),
+                ),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
                   title: const Text('Sync status', style: AppTextStyles.body),
                   onTap: () => context.go('/settings/sync'),
                 ),

@@ -24,6 +24,8 @@ import '../../features/settings/screens/device_settings_screen.dart';
 import '../../features/settings/screens/hardware_settings_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/screens/sync_status_screen.dart';
+import '../../features/setup/providers/setup_providers.dart';
+import '../../features/setup/screens/first_run_setup_screen.dart';
 import '../widgets/app_shell.dart';
 
 class _RouterRefresh extends ChangeNotifier {
@@ -35,6 +37,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   ref.onDispose(refresh.dispose);
   ref.listen(sessionProvider, (previous, next) => refresh.ping());
   ref.listen(sessionBootstrapProvider, (previous, next) => refresh.ping());
+  ref.listen(setupChecklistProvider, (previous, next) => refresh.ping());
 
   return GoRouter(
     initialLocation: '/pos',
@@ -54,6 +57,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (loc == '/login' || loc == '/pin') return null;
         return '/login';
       }
+      final setup = ref.read(setupChecklistProvider);
+      final setupAllowed = loc == '/setup' ||
+          loc.startsWith('/settings/hardware') ||
+          loc.startsWith('/settings/device') ||
+          loc.startsWith('/settings/sync');
+      if (setup.loaded && !setup.complete && !setupAllowed) {
+        return '/setup';
+      }
       if (onAuth) return '/pos';
       return null;
     },
@@ -61,6 +72,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/pin', builder: (context, state) => const PinScreen()),
+      GoRoute(
+        path: '/setup',
+        builder: (context, state) => const FirstRunSetupScreen(),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return AppShell(navigationShell: navigationShell);
