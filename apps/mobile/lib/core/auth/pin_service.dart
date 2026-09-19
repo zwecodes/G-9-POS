@@ -45,6 +45,31 @@ class PinService {
     }
   }
 
+  /// Local-only PIN change (REQUIREMENTS.md §5.1). Never sent to the server.
+  Future<bool> changePin({
+    required String userId,
+    required String currentPin,
+    required String newPin,
+  }) async {
+    try {
+      if (newPin.length < 4 || newPin.length > 8) return false;
+      if (!RegExp(r'^\d+$').hasMatch(newPin)) return false;
+      final ok = await verifyPin(userId, currentPin);
+      if (!ok) return false;
+      final hash = BCrypt.hashpw(newPin, BCrypt.gensalt());
+      await (_db.update(_db.users)..where((u) => u.id.equals(userId))).write(
+        UsersCompanion(
+          pin: Value(hash),
+          updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+        ),
+      );
+      return true;
+    } catch (error, stack) {
+      _log.e('PIN change failed', error: error, stackTrace: stack);
+      return false;
+    }
+  }
+
   Future<User?> _activeUser(String userId) {
     return (_db.select(_db.users)
           ..where((u) => u.id.equals(userId) & u.deletedAt.isNull()))

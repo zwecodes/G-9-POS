@@ -19,6 +19,7 @@ import '../../features/sales/repositories/sale_repository.dart';
 import '../../features/sales/screens/sale_detail_screen.dart';
 import '../../features/sales/screens/sales_history_screen.dart';
 import '../../features/categories/screens/category_list_screen.dart';
+import '../../features/settings/screens/change_pin_screen.dart';
 import '../../features/settings/screens/device_settings_screen.dart';
 import '../../features/settings/screens/hardware_settings_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
@@ -148,6 +149,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'categories',
                     builder: (context, state) => const CategoryListScreen(),
+                  ),
+                  GoRoute(
+                    path: 'pin',
+                    builder: (context, state) => const ChangePinScreen(),
                   ),
                   GoRoute(
                     path: 'expenses',

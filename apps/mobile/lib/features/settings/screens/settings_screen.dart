@@ -88,6 +88,14 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
+                  title: const Text('Change PIN', style: AppTextStyles.body),
+                  onTap: () => context.push('/settings/pin'),
+                ),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
                   title: const Text('Lock screen', style: AppTextStyles.body),
                   onTap: () => ref.read(sessionProvider.notifier).lock(),
                 ),
