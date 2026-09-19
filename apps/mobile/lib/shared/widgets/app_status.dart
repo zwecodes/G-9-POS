@@ -32,6 +32,7 @@ class SyncStatusButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(clockTickProvider);
     final lastSync = ref.watch(lastSyncAtMsProvider);
     final pending = ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
     final now = DateTime.now().millisecondsSinceEpoch;

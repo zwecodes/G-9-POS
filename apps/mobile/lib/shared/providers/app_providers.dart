@@ -1,5 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
 
 import '../../core/auth/auth_constants.dart';
@@ -16,6 +17,9 @@ import '../../core/sync/sync_rejection_handler.dart';
 import '../../core/sync/sync_runtime.dart';
 import '../../core/utils/uuid_generator.dart';
 
+const kDeviceNameKey = 'g9pos_device_name';
+const kDefaultDeviceName = 'G9POS';
+
 /// Overridden in `main()` and in tests. Never opens a file from the default.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   throw StateError('appDatabaseProvider must be overridden');
@@ -29,7 +33,45 @@ final nowMsProvider = Provider<int Function()>((ref) {
   return () => DateTime.now().millisecondsSinceEpoch;
 });
 
-final deviceNameProvider = Provider<String>((ref) => 'G9POS');
+class DeviceNameNotifier extends StateNotifier<String> {
+  DeviceNameNotifier(this._storage) : super(kDefaultDeviceName) {
+    _restore();
+  }
+
+  final FlutterSecureStorage _storage;
+
+  Future<void> _restore() async {
+    final saved = await _storage.read(key: kDeviceNameKey);
+    if (saved != null && saved.trim().isNotEmpty) {
+      state = saved.trim();
+    }
+  }
+
+  Future<void> setName(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    await _storage.write(key: kDeviceNameKey, value: trimmed);
+    state = trimmed;
+  }
+}
+
+final deviceNameNotifierProvider =
+    StateNotifierProvider<DeviceNameNotifier, String>((ref) {
+  return DeviceNameNotifier(const FlutterSecureStorage());
+});
+
+final deviceNameProvider = Provider<String>((ref) {
+  return ref.watch(deviceNameNotifierProvider);
+});
+
+/// Ticks once a minute so sync-age colors in the header stay current.
+final clockTickProvider = StreamProvider<int>((ref) async* {
+  yield DateTime.now().millisecondsSinceEpoch;
+  yield* Stream.periodic(
+    const Duration(minutes: 1),
+    (_) => DateTime.now().millisecondsSinceEpoch,
+  );
+});
 
 final deviceTypeProvider = Provider<String>((ref) => 'tablet');
 

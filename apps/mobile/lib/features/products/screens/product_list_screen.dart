@@ -22,12 +22,18 @@ class ProductListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Products'),
         actions: [
-          if (isOwner)
+          if (isOwner) ...[
+            IconButton(
+              tooltip: 'Categories',
+              icon: const Icon(Icons.category_outlined),
+              onPressed: () => context.push('/settings/categories'),
+            ),
             IconButton(
               tooltip: 'Inventory',
               icon: const Icon(Icons.warehouse_outlined),
               onPressed: () => context.push('/products/inventory'),
             ),
+          ],
           const SyncStatusButton(),
         ],
       ),

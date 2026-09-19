@@ -18,6 +18,8 @@ import '../../features/reports/screens/reports_screen.dart';
 import '../../features/sales/repositories/sale_repository.dart';
 import '../../features/sales/screens/sale_detail_screen.dart';
 import '../../features/sales/screens/sales_history_screen.dart';
+import '../../features/categories/screens/category_list_screen.dart';
+import '../../features/settings/screens/device_settings_screen.dart';
 import '../../features/settings/screens/hardware_settings_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/screens/sync_status_screen.dart';
@@ -138,6 +140,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'hardware',
                     builder: (context, state) => const HardwareSettingsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'device',
+                    builder: (context, state) => const DeviceSettingsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'categories',
+                    builder: (context, state) => const CategoryListScreen(),
                   ),
                   GoRoute(
                     path: 'expenses',
