@@ -1,0 +1,29 @@
+# Secrets and local tooling
+.env
+**/.env
+!.env.example
+!**/.env.example
+
+# Flutter / Dart
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/coverage/
+
+# Go
+**/bin/
+**/vendor/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Design refs (local only)
+design-refs/
+
+# Agent / Cursor local
+.cursor/

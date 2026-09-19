@@ -1,8 +1,13 @@
 # Local / VPS stack for G9POS (ARCHITECTURE.md §9).
 # Usage from repo root:
-#   cp services/backend/.env.example infrastructure/.env
+#   cp infrastructure/.env.example infrastructure/.env
 #   # edit JWT_SECRET
-#   docker compose -f infrastructure/docker-compose.yml up -d --build
+#   docker compose -f infrastructure/docker-compose.yml --env-file infrastructure/.env up -d --build
+#
+# First owner (before public exposure):
+#   API_URL=http://localhost:8080 OWNER_USERNAME=... OWNER_PASSWORD=... OWNER_NAME=... OWNER_PIN=1234 \
+#     go run ./cmd/setupowner
+#   (run from services/backend)
 
 services:
   db:
