@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -18,6 +19,7 @@ class CartPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final cart = ref.watch(cartProvider);
     return Material(
       color: AppColors.surface,
@@ -25,9 +27,9 @@ class CartPanel extends ConsumerWidget {
         children: [
           Expanded(
             child: cart.isEmpty
-                ? const EmptyState(
+                ? EmptyState(
                     icon: Icons.shopping_cart_outlined,
-                    message: 'Scan a product or search above to start a sale',
+                    message: l10n.cartEmpty,
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.all(AppSpacing.sm),
@@ -62,7 +64,7 @@ class CartPanel extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    const Text('TOTAL', style: AppTextStyles.sectionHeader),
+                    Text(l10n.total.toUpperCase(), style: AppTextStyles.sectionHeader),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: FittedBox(
@@ -78,7 +80,7 @@ class CartPanel extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 PrimaryButton(
-                  label: 'COMPLETE SALE',
+                  label: context.l10n.completeSale,
                   height: AppSpacing.completeSaleButton,
                   onPressed: cart.isEmpty ? null : () => context.push('/pos/checkout'),
                 ),
@@ -143,27 +145,28 @@ class _CartRow extends ConsumerWidget {
   }
 
   Future<void> _editQuantity(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
     final controller = TextEditingController(text: '${line.quantity}');
     final result = await showDialog<int>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Quantity', style: AppTextStyles.title),
+          title: Text(context.l10n.quantity, style: AppTextStyles.title),
           content: TextField(
             controller: controller,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Quantity'),
+            decoration: InputDecoration(labelText: context.l10n.quantity),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Keep', style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+              child: Text(l10n.keep, style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, int.tryParse(controller.text)),
-              child: Text('Set', style: AppTextStyles.body.copyWith(color: AppColors.primary)),
+              child: Text(context.l10n.set, style: AppTextStyles.body.copyWith(color: AppColors.primary)),
             ),
           ],
         );

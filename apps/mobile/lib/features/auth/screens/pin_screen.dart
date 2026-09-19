@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../shared/widgets/ui_primitives.dart';
@@ -26,6 +27,7 @@ class _PinScreenState extends ConsumerState<PinScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final session = ref.watch(sessionProvider);
     final users = ref.watch(unlockableUsersProvider);
     return Scaffold(
@@ -34,9 +36,9 @@ class _PinScreenState extends ConsumerState<PinScreen> {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: users.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => const EmptyState(
+            error: (error, stack) => EmptyState(
               icon: Icons.lock,
-              message: 'Could not load staff. Try again.',
+              message: l10n.couldNotLoadStaff,
             ),
             data: (list) {
               if (list.isEmpty) {
@@ -44,16 +46,16 @@ class _PinScreenState extends ConsumerState<PinScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Unlock this device', style: AppTextStyles.title),
+                    Text(l10n.unlockThisDevice, style: AppTextStyles.title),
                     const SizedBox(height: AppSpacing.md),
-                    const Text(
-                      'No staff PINs on this device yet. Continue as the signed-in owner.',
+                    Text(
+                      context.l10n.noStaffPinsYet,
                       style: AppTextStyles.body,
                     ),
                     ErrorText(session.error),
                     const SizedBox(height: AppSpacing.lg),
                     PrimaryButton(
-                      label: 'Continue',
+                      label: l10n.continueLabel,
                       onPressed: session.hasJwt
                           ? () => ref.read(sessionProvider.notifier).unlockAsCachedUser()
                           : null,
@@ -65,7 +67,7 @@ class _PinScreenState extends ConsumerState<PinScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Who is selling?', style: AppTextStyles.title),
+                  Text(l10n.whoIsSelling, style: AppTextStyles.title),
                   const SizedBox(height: AppSpacing.lg),
                   DropdownButton<String>(
                     isExpanded: true,
@@ -85,13 +87,13 @@ class _PinScreenState extends ConsumerState<PinScreen> {
                       FilteringTextInputFormatter.digitsOnly,
                       LengthLimitingTextInputFormatter(4),
                     ],
-                    decoration: const InputDecoration(labelText: 'PIN'),
+                    decoration: InputDecoration(labelText: l10n.pin),
                     onSubmitted: (_) => _unlock(),
                   ),
                   ErrorText(session.error),
                   const SizedBox(height: AppSpacing.lg),
                   PrimaryButton(
-                    label: 'Unlock',
+                    label: l10n.unlock,
                     busy: session.busy,
                     onPressed: _unlock,
                   ),

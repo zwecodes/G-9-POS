@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -22,11 +23,12 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final isOwner = ref.watch(sessionProvider).operatorRole == 'owner';
     final categories = ref.watch(categoryListProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Categories'),
+        title: Text(l10n.categoriesTitle),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -44,25 +46,25 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
             ),
           Expanded(
             child: !isOwner
-                ? const EmptyState(
+                ? EmptyState(
                     icon: Icons.lock_outline,
-                    message: 'Only the owner can manage categories.',
+                    message: l10n.categoriesOwnerOnly,
                   )
                 : categories.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
-                    error: (error, stack) => const EmptyState(
+                    error: (error, stack) => EmptyState(
                       icon: Icons.error_outline,
-                      message: 'Could not load categories. Try again.',
+                      message: l10n.couldNotLoadCategories,
                     ),
                     data: (list) {
                       if (list.isEmpty) {
                         return EmptyState(
                           icon: Icons.category_outlined,
-                          message: 'No categories yet — add the first one',
+                          message: l10n.noCategoriesYet,
                           action: TextButton(
                             onPressed: () => _editCategory(),
-                            child: const Text('Add category'),
+                            child: Text(l10n.addCategory),
                           ),
                         );
                       }
@@ -87,7 +89,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
                               sortOrder: category.sortOrder,
                             ),
                             trailing: IconButton(
-                              tooltip: 'Delete',
+                              tooltip: l10n.delete,
                               onPressed: () => _confirmDelete(category.id, category.name),
                               icon: Icon(
                                 Icons.delete_outline,
@@ -117,25 +119,27 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
     String name = '',
     int sortOrder = 0,
   }) async {
+    final l10n = context.l10n;
     final controller = TextEditingController(text: name);
     final result = await showDialog<String>(
       context: context,
       builder: (context) {
+        final dialogL10n = context.l10n;
         return AlertDialog(
           title: Text(
-            id == null ? 'Add category' : 'Edit category',
+            id == null ? dialogL10n.addCategory : dialogL10n.editCategory,
             style: AppTextStyles.title,
           ),
           content: TextField(
             controller: controller,
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Name *'),
+            decoration: InputDecoration(labelText: dialogL10n.nameRequired),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
-                'Cancel',
+                dialogL10n.cancel,
                 style: AppTextStyles.body.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -143,7 +147,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Save', style: AppTextStyles.body),
+              child: Text(dialogL10n.save, style: AppTextStyles.body),
             ),
           ],
         );
@@ -164,25 +168,27 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
       setState(() => _error = error.message);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Could not save the category. Try again.');
+      setState(() => _error = l10n.couldNotSaveCategory);
     }
   }
 
   Future<void> _confirmDelete(String id, String name) async {
+    final l10n = context.l10n;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) {
+        final dialogL10n = context.l10n;
         return AlertDialog(
-          title: const Text('Delete this category?', style: AppTextStyles.title),
+          title: Text(dialogL10n.deleteCategoryTitle, style: AppTextStyles.title),
           content: Text(
-            '"$name" will be removed. Products in it must be moved first.',
+            dialogL10n.deleteCategoryBody(name),
             style: AppTextStyles.body,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: Text(
-                'Keep',
+                dialogL10n.keep,
                 style: AppTextStyles.body.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -191,7 +197,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
             TextButton(
               onPressed: () => Navigator.pop(context, true),
               child: Text(
-                'Delete',
+                dialogL10n.delete,
                 style: AppTextStyles.body.copyWith(color: AppColors.error),
               ),
             ),
@@ -208,7 +214,7 @@ class _CategoryListScreenState extends ConsumerState<CategoryListScreen> {
       setState(() => _error = error.message);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Could not delete the category. Try again.');
+      setState(() => _error = l10n.couldNotDeleteCategory);
     }
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../features/pos/providers/cart_provider.dart';
 
@@ -12,6 +13,7 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final cartCount = ref.watch(cartProvider).itemCount;
     final location = GoRouterState.of(context).uri.path;
     final hideNav = location.contains('/checkout') ||
@@ -37,24 +39,36 @@ class AppShell extends ConsumerWidget {
                   selectedIcon: Badge(
                     isLabelVisible: cartCount > 0,
                     label: Text('$cartCount'),
-                    child: const Icon(Icons.point_of_sale, color: AppColors.primary),
+                    child: const Icon(
+                      Icons.point_of_sale,
+                      color: AppColors.primary,
+                    ),
                   ),
-                  label: 'POS',
+                  label: l10n.navPos,
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.inventory_2_outlined),
-                  selectedIcon: Icon(Icons.inventory_2, color: AppColors.primary),
-                  label: 'Products',
+                NavigationDestination(
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  selectedIcon: const Icon(
+                    Icons.inventory_2,
+                    color: AppColors.primary,
+                  ),
+                  label: l10n.navProducts,
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.bar_chart_outlined),
-                  selectedIcon: Icon(Icons.bar_chart, color: AppColors.primary),
-                  label: 'Reports',
+                NavigationDestination(
+                  icon: const Icon(Icons.bar_chart_outlined),
+                  selectedIcon: const Icon(
+                    Icons.bar_chart,
+                    color: AppColors.primary,
+                  ),
+                  label: l10n.navReports,
                 ),
-                const NavigationDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings, color: AppColors.primary),
-                  label: 'Settings',
+                NavigationDestination(
+                  icon: const Icon(Icons.settings_outlined),
+                  selectedIcon: const Icon(
+                    Icons.settings,
+                    color: AppColors.primary,
+                  ),
+                  label: l10n.navSettings,
                 ),
               ],
             ),

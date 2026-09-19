@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -13,22 +14,23 @@ class SyncStatusScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     ref.watch(clockTickProvider);
     final pending = ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
     final lastSync = ref.watch(lastSyncAtMsProvider);
     final notices = ref.watch(syncNoticeStoreProvider).items;
-    final ageLine = _stalenessLine(lastSync);
+    final ageLine = _stalenessLine(context, lastSync);
     return Scaffold(
-      appBar: AppBar(title: const Text('Sync status')),
+      appBar: AppBar(title: Text(l10n.syncStatus)),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          Text('Pending items: $pending', style: AppTextStyles.body),
+          Text(l10n.pendingItems(pending), style: AppTextStyles.body),
           const SizedBox(height: AppSpacing.sm),
           Text(
             lastSync == null
-                ? 'Not synced yet'
-                : 'Last synced ${ShopDateUtils.formatShopDateTime(lastSync)}',
+                ? l10n.notSyncedYet
+                : l10n.lastSynced(ShopDateUtils.formatShopDateTime(lastSync)),
             style: AppTextStyles.caption,
           ),
           if (ageLine != null) ...[
@@ -40,16 +42,16 @@ class SyncStatusScreen extends ConsumerWidget {
           ],
           const SizedBox(height: AppSpacing.lg),
           PrimaryButton(
-            label: 'Sync now',
+            label: l10n.syncNow,
             onPressed: () async {
               await ref.read(syncRuntimeProvider).syncNow();
             },
           ),
           const SizedBox(height: AppSpacing.xl),
-          const Text('Notices', style: AppTextStyles.sectionHeader),
+          Text(l10n.notices, style: AppTextStyles.sectionHeader),
           const SizedBox(height: AppSpacing.sm),
           if (notices.isEmpty)
-            const Text('No sync problems.', style: AppTextStyles.caption)
+            Text(l10n.noSyncProblems, style: AppTextStyles.caption)
           else
             for (final notice in notices)
               Padding(
@@ -61,27 +63,19 @@ class SyncStatusScreen extends ConsumerWidget {
     );
   }
 
-  (String, Color)? _stalenessLine(int? lastSync) {
+  (String, Color)? _stalenessLine(BuildContext context, int? lastSync) {
     if (lastSync == null) return null;
+    final l10n = context.l10n;
     final age = DateTime.now().millisecondsSinceEpoch - lastSync;
     if (age > 24 * 60 * 60 * 1000) {
-      return (
-        'Sync is more than a day old. Connect to the internet when you can.',
-        AppColors.error,
-      );
+      return (l10n.syncStaleDay, AppColors.error);
     }
     if (age > 4 * 60 * 60 * 1000) {
       final hours = (age / (60 * 60 * 1000)).floor();
-      return (
-        'Last sync was about ${hours}h ago. Still safe to sell.',
-        AppColors.stale,
-      );
+      return (l10n.syncStaleHours(hours), AppColors.stale);
     }
     if (age > 2 * 60 * 60 * 1000) {
-      return (
-        'Sync is a few hours old. Still safe to sell.',
-        AppColors.warning,
-      );
+      return (l10n.syncStaleFewHours, AppColors.warning);
     }
     return null;
   }

@@ -8,7 +8,7 @@ import 'app_text_styles.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData light() {
+  static ThemeData light({Locale? locale}) {
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -22,13 +22,19 @@ class AppTheme {
       scaffoldBackgroundColor: AppColors.background,
       canvasColor: AppColors.surface,
     );
+    final myanmar = locale?.languageCode == 'my';
+    final textTheme = myanmar
+        ? GoogleFonts.notoSansMyanmarTextTheme(base.textTheme)
+        : GoogleFonts.interTextTheme(base.textTheme);
     return base.copyWith(
-      textTheme: GoogleFonts.interTextTheme(base.textTheme),
-      appBarTheme: const AppBarTheme(
+      textTheme: textTheme,
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        titleTextStyle: AppTextStyles.title,
+        titleTextStyle: myanmar
+            ? GoogleFonts.notoSansMyanmar(textStyle: AppTextStyles.title)
+            : AppTextStyles.title,
       ),
       dividerColor: AppColors.surfaceVariant,
       inputDecorationTheme: InputDecorationTheme(

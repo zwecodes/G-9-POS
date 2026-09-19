@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -25,11 +26,12 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final expenses = ref.watch(expenseListProvider);
     final isOwner = ref.watch(sessionProvider).operatorRole == 'owner';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Expenses'),
+        title: Text(l10n.expenses),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -48,18 +50,18 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
           Expanded(
             child: expenses.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => const EmptyState(
+              error: (error, stack) => EmptyState(
                 icon: Icons.error_outline,
-                message: 'Could not load expenses. Try again.',
+                message: l10n.couldNotLoadExpenses,
               ),
               data: (list) {
                 if (list.isEmpty) {
                   return EmptyState(
                     icon: Icons.receipt_long_outlined,
-                    message: 'No expenses yet — add the first one',
+                    message: l10n.noExpensesYet,
                     action: TextButton(
                       onPressed: () => context.push('/settings/expenses/new'),
-                      child: const Text('Add expense'),
+                      child: Text(l10n.addExpense),
                     ),
                   );
                 }
@@ -130,6 +132,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) {
+        final dialogL10n = context.l10n;
         return AlertDialog(
           title: const Text('Delete this expense?', style: AppTextStyles.title),
           content: Text(
@@ -140,7 +143,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
             TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: Text(
-                'Keep',
+                dialogL10n.keep,
                 style: AppTextStyles.body.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -149,7 +152,7 @@ class _ExpenseListScreenState extends ConsumerState<ExpenseListScreen> {
             TextButton(
               onPressed: () => Navigator.pop(context, true),
               child: Text(
-                'Delete',
+                dialogL10n.delete,
                 style: AppTextStyles.body.copyWith(color: AppColors.error),
               ),
             ),

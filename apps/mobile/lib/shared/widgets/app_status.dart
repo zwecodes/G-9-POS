@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -20,7 +21,7 @@ class OfflineBanner extends ConsumerWidget {
       color: AppColors.warning,
       alignment: Alignment.center,
       child: Text(
-        'Offline — sales are saving locally',
+        context.l10n.offlineBanner,
         style: AppTextStyles.caption.copyWith(color: AppColors.textPrimary),
       ),
     );
@@ -32,6 +33,7 @@ class SyncStatusButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     ref.watch(clockTickProvider);
     final lastSync = ref.watch(lastSyncAtMsProvider);
     final pending = ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
@@ -44,17 +46,17 @@ class SyncStatusButton extends ConsumerWidget {
       final age = now - lastSync;
       if (age > 24 * 60 * 60 * 1000) {
         color = AppColors.error;
-        label = '1d ago';
+        label = l10n.ago1d;
       } else if (age > 4 * 60 * 60 * 1000) {
         color = AppColors.stale;
-        label = '${(age / (60 * 60 * 1000)).floor()}h ago';
+        label = l10n.agoHours((age / (60 * 60 * 1000)).floor());
       } else if (age > 2 * 60 * 60 * 1000) {
         color = AppColors.warning;
       }
     }
 
     return IconButton(
-      tooltip: 'Sync status',
+      tooltip: l10n.syncStatus,
       iconSize: AppSpacing.lg,
       padding: const EdgeInsets.all(AppSpacing.md),
       onPressed: () => context.go('/settings/sync'),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/hardware/hardware_provider.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -29,6 +30,7 @@ class _SaleCompleteScreenState extends ConsumerState<SaleCompleteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final printerReady = ref.watch(receiptPrinterProvider).isConnected;
     return Scaffold(
       backgroundColor: AppColors.success,
@@ -56,8 +58,8 @@ class _SaleCompleteScreenState extends ConsumerState<SaleCompleteScreen> {
                 const SizedBox(height: AppSpacing.md),
                 Text(
                   printerReady
-                      ? 'Printing receipt…'
-                      : 'No printer — reprint from history when ready',
+                      ? l10n.printingReceipt
+                      : l10n.printerNotConnected,
                   textAlign: TextAlign.center,
                   style: AppTextStyles.body.copyWith(color: AppColors.onPrimary),
                 ),

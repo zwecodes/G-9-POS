@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
+import '../../../core/l10n/locale_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -13,10 +15,12 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final session = ref.watch(sessionProvider);
+    final locale = ref.watch(localeProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(l10n.settings),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -25,12 +29,43 @@ class SettingsScreen extends ConsumerWidget {
           Expanded(
             child: ListView(
               children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.md,
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                  ),
+                  child: Text(l10n.language, style: AppTextStyles.sectionHeader),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  child: SegmentedButton<String>(
+                    segments: [
+                      ButtonSegment(
+                        value: 'my',
+                        label: Text(l10n.languageMyanmar),
+                      ),
+                      ButtonSegment(
+                        value: 'en',
+                        label: Text(l10n.languageEnglish),
+                      ),
+                    ],
+                    selected: {locale.languageCode},
+                    onSelectionChanged: (values) {
+                      ref
+                          .read(localeProvider.notifier)
+                          .setLocale(Locale(values.first));
+                    },
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('Sales history', style: AppTextStyles.body),
+                  title: Text(l10n.salesHistory, style: AppTextStyles.body),
                   onTap: () => context.push('/settings/sales'),
                 ),
                 ListTile(
@@ -38,7 +73,7 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('Expenses', style: AppTextStyles.body),
+                  title: Text(l10n.expenses, style: AppTextStyles.body),
                   onTap: () => context.push('/settings/expenses'),
                 ),
                 ListTile(
@@ -46,7 +81,7 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('Categories', style: AppTextStyles.body),
+                  title: Text(l10n.categories, style: AppTextStyles.body),
                   onTap: () => context.push('/settings/categories'),
                 ),
                 ListTile(
@@ -54,7 +89,7 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('This device', style: AppTextStyles.body),
+                  title: Text(l10n.thisDevice, style: AppTextStyles.body),
                   onTap: () => context.push('/settings/device'),
                 ),
                 ListTile(
@@ -62,7 +97,10 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('Device setup checklist', style: AppTextStyles.body),
+                  title: Text(
+                    l10n.deviceSetupChecklist,
+                    style: AppTextStyles.body,
+                  ),
                   onTap: () => context.push('/setup'),
                 ),
                 ListTile(
@@ -70,7 +108,7 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('Sync status', style: AppTextStyles.body),
+                  title: Text(l10n.syncStatus, style: AppTextStyles.body),
                   onTap: () => context.go('/settings/sync'),
                 ),
                 ListTile(
@@ -78,7 +116,7 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('Hardware', style: AppTextStyles.body),
+                  title: Text(l10n.hardware, style: AppTextStyles.body),
                   onTap: () => context.push('/settings/hardware'),
                 ),
                 ListTile(
@@ -87,7 +125,7 @@ class SettingsScreen extends ConsumerWidget {
                     vertical: AppSpacing.sm,
                   ),
                   title: Text(
-                    session.operatorName ?? 'Signed in',
+                    session.operatorName ?? l10n.signedIn,
                     style: AppTextStyles.caption,
                   ),
                 ),
@@ -96,7 +134,7 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('Change PIN', style: AppTextStyles.body),
+                  title: Text(l10n.changePin, style: AppTextStyles.body),
                   onTap: () => context.push('/settings/pin'),
                 ),
                 ListTile(
@@ -104,7 +142,7 @@ class SettingsScreen extends ConsumerWidget {
                     horizontal: AppSpacing.md,
                     vertical: AppSpacing.sm,
                   ),
-                  title: const Text('Lock screen', style: AppTextStyles.body),
+                  title: Text(l10n.lockScreen, style: AppTextStyles.body),
                   onTap: () => ref.read(sessionProvider.notifier).lock(),
                 ),
                 ListTile(
@@ -113,7 +151,7 @@ class SettingsScreen extends ConsumerWidget {
                     vertical: AppSpacing.sm,
                   ),
                   title: Text(
-                    'Sign out',
+                    l10n.signOut,
                     style: AppTextStyles.body.copyWith(color: AppColors.error),
                   ),
                   onTap: () => _confirmSignOut(context, ref),
@@ -129,25 +167,25 @@ class SettingsScreen extends ConsumerWidget {
   Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
+        final d = dialogContext.l10n;
         return AlertDialog(
-          title: const Text('Sign out?', style: AppTextStyles.title),
-          content: const Text(
-            'You will need the owner password to use this device again.',
-            style: AppTextStyles.body,
-          ),
+          title: Text(d.signOutConfirmTitle, style: AppTextStyles.title),
+          content: Text(d.signOutConfirmBody, style: AppTextStyles.body),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: Text(
-                'Stay',
-                style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                d.stay,
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(dialogContext, true),
               child: Text(
-                'Sign out',
+                d.signOut,
                 style: AppTextStyles.body.copyWith(color: AppColors.error),
               ),
             ),

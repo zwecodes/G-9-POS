@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/hardware/hardware_provider.dart';
 import '../../../core/hardware/hardware_status.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -14,10 +15,11 @@ class HardwareSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final scanner = ref.watch(scannerProvider);
     final printer = ref.watch(receiptPrinterProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Hardware')),
+      appBar: AppBar(title: Text(l10n.hardwareTitle)),
       body: Column(
         children: [
           const OfflineBanner(),
@@ -26,9 +28,7 @@ class HardwareSettingsScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(AppSpacing.md),
               children: [
                 Text(
-                  'Scanner and printer are not connected yet. Sales still work '
-                  '— type barcodes manually and reprint receipts from history '
-                  'after you pair hardware.',
+                  l10n.hardwareHelp,
                   style: AppTextStyles.body.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -36,7 +36,7 @@ class HardwareSettingsScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.xl),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Barcode scanner', style: AppTextStyles.body),
+                  title: Text(l10n.barcodeScanner, style: AppTextStyles.body),
                   subtitle: Text(
                     scanner.status.label,
                     style: AppTextStyles.caption,
@@ -52,7 +52,7 @@ class HardwareSettingsScreen extends ConsumerWidget {
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Receipt printer', style: AppTextStyles.body),
+                  title: Text(l10n.receiptPrinter, style: AppTextStyles.body),
                   subtitle: Text(
                     printer.status.label,
                     style: AppTextStyles.caption,
@@ -68,7 +68,7 @@ class HardwareSettingsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  'Test buttons will appear here after Bluetooth pairing is added.',
+                  l10n.hardwareTestsLater,
                   style: AppTextStyles.caption,
                 ),
               ],

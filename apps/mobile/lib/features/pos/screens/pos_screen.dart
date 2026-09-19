@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -14,10 +15,11 @@ class PosScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('POS'),
+        title: Text(l10n.navPos),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -50,7 +52,7 @@ class PosScreen extends ConsumerWidget {
                 label: Text('${ref.watch(cartProvider).itemCount}'),
                 child: const Icon(Icons.shopping_cart, color: AppColors.onPrimary),
               ),
-              label: const Text('Cart', style: AppTextStyles.buttonPrimary),
+              label: Text(context.l10n.cart, style: AppTextStyles.buttonPrimary),
             ),
     );
   }

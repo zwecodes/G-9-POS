@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -44,6 +45,7 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final checklist = ref.watch(setupChecklistProvider);
     final products = ref.watch(productListProvider).valueOrNull ?? [];
     final pending = ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
@@ -57,37 +59,36 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Set up this device'),
+        title: Text(l10n.setupTitle),
         automaticallyImplyLeading: false,
       ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
           Text(
-            'Complete these steps before the shop opens. You can skip optional '
-            'items, but do not skip them on both devices.',
+            l10n.setupIntro,
             style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: AppSpacing.xl),
-          const Text('1. Device name', style: AppTextStyles.sectionHeader),
+          Text(l10n.setupDeviceName, style: AppTextStyles.sectionHeader),
           const SizedBox(height: AppSpacing.sm),
           TextField(
             controller: _deviceName,
-            decoration: const InputDecoration(
-              labelText: 'Name (e.g. Counter tablet)',
+            decoration: InputDecoration(
+              labelText: l10n.setupDeviceNameHint,
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
           PrimaryButton(
-            label: 'Save name',
+            label: l10n.saveName,
             onPressed: isOwner ? _saveName : null,
           ),
           const SizedBox(height: AppSpacing.xl),
-          const Text('2. Hardware checklist', style: AppTextStyles.sectionHeader),
+          Text(l10n.setupHardware, style: AppTextStyles.sectionHeader),
           const SizedBox(height: AppSpacing.sm),
           _ChecklistTile(
-            title: 'Barcode scanner paired to this device',
-            subtitle: 'Pair in Android Bluetooth settings, then confirm here.',
+            title: l10n.setupScannerTitle,
+            subtitle: l10n.setupScannerSubtitle,
             mark: checklist.scanner,
             onDone: () => ref
                 .read(setupChecklistProvider.notifier)
@@ -97,8 +98,8 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
                 .setScanner(ChecklistMark.skipped),
           ),
           _ChecklistTile(
-            title: 'Receipt printer paired to this device',
-            subtitle: 'Optional at launch — skip if you have no printer yet.',
+            title: l10n.setupPrinterTitle,
+            subtitle: l10n.setupPrinterSubtitle,
             mark: checklist.printer,
             onDone: () => ref
                 .read(setupChecklistProvider.notifier)
@@ -108,9 +109,8 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
                 .setPrinter(ChecklistMark.skipped),
           ),
           _ChecklistTile(
-            title: 'Other device (tablet or phone) also set up',
-            subtitle:
-                'Both devices must be paired and signed in before opening day.',
+            title: l10n.setupOtherTitle,
+            subtitle: l10n.setupOtherSubtitle,
             mark: checklist.otherDevice,
             onDone: () => ref
                 .read(setupChecklistProvider.notifier)
@@ -122,37 +122,35 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
           TextButton(
             onPressed: () => context.push('/settings/hardware'),
             child: Text(
-              'Open hardware status',
+              l10n.openHardwareStatus,
               style: AppTextStyles.body.copyWith(color: AppColors.primary),
             ),
           ),
           const SizedBox(height: AppSpacing.xl),
-          const Text('3. Sync catalog', style: AppTextStyles.sectionHeader),
+          Text(l10n.setupSync, style: AppTextStyles.sectionHeader),
           const SizedBox(height: AppSpacing.sm),
           Text(
             products.isEmpty
-                ? 'No products on this device yet. Sync now after the catalog '
-                    'was imported on the dashboard.'
-                : '${products.length} products ready. Pending sync: $pending.',
+                ? l10n.setupSyncEmpty
+                : l10n.setupSyncReady(products.length, pending),
             style: AppTextStyles.body,
           ),
           const SizedBox(height: AppSpacing.sm),
           PrimaryButton(
-            label: 'Sync now',
+            label: l10n.syncNow,
             busy: _syncing,
             onPressed: _syncing ? null : _syncNow,
           ),
           const SizedBox(height: AppSpacing.xl),
-          const Text('4. Active POS', style: AppTextStyles.sectionHeader),
+          Text(l10n.setupActivePos, style: AppTextStyles.sectionHeader),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Mark this device as the shop’s active POS, or skip if this is the '
-            'standby phone.',
+            l10n.setupActivePosHelp,
             style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: AppSpacing.sm),
           PrimaryButton(
-            label: 'Make this the active POS',
+            label: l10n.makeActivePos,
             busy: _activating,
             onPressed: (!isOwner || _activating) ? null : _activate,
           ),
@@ -166,14 +164,14 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
           ],
           const SizedBox(height: AppSpacing.xl),
           PrimaryButton(
-            label: 'Finish setup',
+            label: l10n.finishSetup,
             onPressed: checklist.canFinish ? _finish : null,
           ),
           if (!checklist.canFinish)
             Padding(
               padding: const EdgeInsets.only(top: AppSpacing.sm),
               child: Text(
-                'Mark or skip every checklist item before finishing.',
+                l10n.finishSetupHint,
                 style: AppTextStyles.caption,
               ),
             ),
@@ -183,32 +181,31 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
   }
 
   Future<void> _saveName() async {
+    final l10n = context.l10n;
     setState(() {
       _error = null;
       _message = null;
     });
     final name = _deviceName.text.trim();
     if (name.isEmpty) {
-      setState(() => _error = 'Please enter a device name.');
+      setState(() => _error = l10n.enterDeviceName);
       return;
     }
     try {
       await ref.read(deviceSettingsRepositoryProvider).renameThisDevice(name);
       await ref.read(deviceNameNotifierProvider.notifier).setName(name);
       if (!mounted) return;
-      setState(() => _message = 'Device name saved.');
+      setState(() => _message = l10n.deviceNameSaved);
     } catch (_) {
       // Offline rename fails — still keep the local display name.
       await ref.read(deviceNameNotifierProvider.notifier).setName(name);
       if (!mounted) return;
-      setState(
-        () => _message =
-            'Name saved on this device. It will update on the server when online.',
-      );
+      setState(() => _message = l10n.nameSavedLocal);
     }
   }
 
   Future<void> _syncNow() async {
+    final l10n = context.l10n;
     setState(() {
       _syncing = true;
       _error = null;
@@ -219,19 +216,19 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
       if (!mounted) return;
       setState(() {
         _syncing = false;
-        _message = 'Sync finished.';
+        _message = l10n.syncFinished;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _syncing = false;
-        _error =
-            'Could not sync. Check the connection and try again — you can still finish setup.';
+        _error = l10n.couldNotSync;
       });
     }
   }
 
   Future<void> _activate() async {
+    final l10n = context.l10n;
     setState(() {
       _activating = true;
       _error = null;
@@ -242,8 +239,7 @@ class _FirstRunSetupScreenState extends ConsumerState<FirstRunSetupScreen> {
       if (!mounted) return;
       setState(() {
         _activating = false;
-        _message =
-            'This device will be the active POS after the next successful sync.';
+        _message = l10n.activePosQueued;
       });
     } catch (_) {
       if (!mounted) return;
@@ -278,10 +274,11 @@ class _ChecklistTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final status = switch (mark) {
-      ChecklistMark.done => ('Done', AppColors.success),
-      ChecklistMark.skipped => ('Skipped', AppColors.warning),
-      ChecklistMark.pending => ('Needed', AppColors.textMuted),
+      ChecklistMark.done => (l10n.done, AppColors.success),
+      ChecklistMark.skipped => (l10n.skipped, AppColors.warning),
+      ChecklistMark.pending => (l10n.needed, AppColors.textMuted),
     };
     return Card(
       elevation: 0,
@@ -309,14 +306,14 @@ class _ChecklistTile extends StatelessWidget {
                 TextButton(
                   onPressed: onDone,
                   child: Text(
-                    'Done',
+                    l10n.done,
                     style: AppTextStyles.body.copyWith(color: AppColors.success),
                   ),
                 ),
                 TextButton(
                   onPressed: onSkip,
                   child: Text(
-                    'Skip',
+                    l10n.skip,
                     style: AppTextStyles.body.copyWith(
                       color: AppColors.textSecondary,
                     ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -16,10 +17,11 @@ class SalesHistoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final sales = ref.watch(saleListProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sales history'),
+        title: Text(l10n.salesHistory),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -28,15 +30,15 @@ class SalesHistoryScreen extends ConsumerWidget {
           Expanded(
             child: sales.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => const EmptyState(
+              error: (error, stack) => EmptyState(
                 icon: Icons.error_outline,
-                message: 'Could not load sales. Try again.',
+                message: l10n.couldNotLoadSales,
               ),
               data: (list) {
                 if (list.isEmpty) {
-                  return const EmptyState(
+                  return EmptyState(
                     icon: Icons.receipt_long,
-                    message: 'No sales today yet',
+                    message: l10n.noSalesToday,
                   );
                 }
                 return ListView.separated(
@@ -65,7 +67,7 @@ class SalesHistoryScreen extends ConsumerWidget {
                           ),
                           if (voided)
                             Text(
-                              'CANCELLED',
+                              l10n.cancelled,
                               style: AppTextStyles.caption.copyWith(color: AppColors.error),
                             ),
                         ],

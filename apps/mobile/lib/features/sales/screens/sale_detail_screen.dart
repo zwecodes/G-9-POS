@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -46,15 +47,16 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final sale = _sale;
     if (sale == null) {
-      return const Scaffold(
+      return Scaffold(
         body: EmptyState(
           icon: Icons.receipt_long,
-          message: 'That sale is no longer available.',
+          message: l10n.saleUnavailable,
         ),
       );
     }
@@ -71,7 +73,7 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
           ),
           if (voided)
             Text(
-              'CANCELLED',
+              l10n.cancelled,
               style: AppTextStyles.caption.copyWith(color: AppColors.error),
             ),
           const SizedBox(height: AppSpacing.lg),
@@ -89,7 +91,7 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
           if (isOwner && !voided) ...[
             const SizedBox(height: AppSpacing.xl),
             PrimaryButton(
-              label: 'Cancel This Sale',
+              label: l10n.cancelThisSale,
               color: AppColors.error,
               onPressed: _confirmVoid,
             ),
@@ -104,13 +106,14 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) {
+        final dialogL10n = context.l10n;
         return AlertDialog(
-          title: const Text('Cancel this sale?', style: AppTextStyles.title),
+          title: Text(dialogL10n.cancelSaleTitle, style: AppTextStyles.title),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'If the shop still allows cancelling this sale today, stock will be put back. If not, the sale will stay completed.',
+              Text(
+                dialogL10n.cancelSaleBody,
                 style: AppTextStyles.body,
               ),
               const SizedBox(height: AppSpacing.md),
@@ -124,14 +127,14 @@ class _SaleDetailScreenState extends ConsumerState<SaleDetailScreen> {
             TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: Text(
-                'Keep It',
+                dialogL10n.keep,
                 style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
               ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
               child: Text(
-                'Yes, Cancel Sale',
+                dialogL10n.cancelThisSale,
                 style: AppTextStyles.body.copyWith(color: AppColors.error),
               ),
             ),

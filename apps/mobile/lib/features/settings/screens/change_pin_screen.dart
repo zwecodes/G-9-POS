@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -34,9 +35,10 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Change PIN'),
+        title: Text(l10n.changePinTitle),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -47,7 +49,7 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
               padding: const EdgeInsets.all(AppSpacing.md),
               children: [
                 Text(
-                  'Your PIN unlocks this device. It stays on the device and is never sent to the server.',
+                  l10n.changePinHelp,
                   style: AppTextStyles.body.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -57,8 +59,8 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
                   controller: _current,
                   obscureText: true,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Current PIN *',
+                  decoration: InputDecoration(
+                    labelText: l10n.currentPin,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -66,9 +68,9 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
                   controller: _next,
                   obscureText: true,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'New PIN *',
-                    hintText: '4–8 digits',
+                  decoration: InputDecoration(
+                    labelText: l10n.newPin,
+                    hintText: l10n.pinHint,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -76,8 +78,8 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
                   controller: _confirm,
                   obscureText: true,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirm new PIN *',
+                  decoration: InputDecoration(
+                    labelText: l10n.confirmNewPin,
                   ),
                 ),
                 ErrorText(_error),
@@ -90,7 +92,7 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
                 ],
                 const SizedBox(height: AppSpacing.lg),
                 PrimaryButton(
-                  label: 'Save PIN',
+                  label: l10n.savePin,
                   busy: _busy,
                   onPressed: _busy ? null : _save,
                 ),
@@ -103,6 +105,7 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
   }
 
   Future<void> _save() async {
+    final l10n = context.l10n;
     setState(() {
       _error = null;
       _success = null;
@@ -110,11 +113,11 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
     final next = _next.text.trim();
     final confirm = _confirm.text.trim();
     if (next != confirm) {
-      setState(() => _error = 'New PIN and confirmation do not match.');
+      setState(() => _error = l10n.pinMismatch);
       return;
     }
     if (next.length < 4 || next.length > 8 || !RegExp(r'^\d+$').hasMatch(next)) {
-      setState(() => _error = 'New PIN must be 4 to 8 digits.');
+      setState(() => _error = l10n.pinInvalid);
       return;
     }
     final operatorId = ref.read(sessionProvider).operatorId;
@@ -132,7 +135,7 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
     if (!ok) {
       setState(() {
         _busy = false;
-        _error = 'Could not change PIN. Check your current PIN and try again.';
+        _error = l10n.pinChangeFailed;
       });
       return;
     }
@@ -141,7 +144,7 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
     _confirm.clear();
     setState(() {
       _busy = false;
-      _success = 'PIN saved on this device.';
+      _success = l10n.pinSaved;
     });
   }
 }

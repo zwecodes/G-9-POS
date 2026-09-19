@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -20,6 +21,7 @@ class ProductGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     ref.watch(posBarcodeListenerProvider);
     final products = ref.watch(sellableProductListProvider);
     final query = ref.watch(posSearchQueryProvider).trim().toLowerCase();
@@ -43,9 +45,9 @@ class ProductGrid extends ConsumerWidget {
             AppSpacing.sm,
           ),
           child: TextField(
-            decoration: const InputDecoration(
-              labelText: 'Search by name',
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              labelText: l10n.searchProducts,
+              prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (value) {
               ref.read(posSearchQueryProvider.notifier).state = value;
@@ -56,9 +58,9 @@ class ProductGrid extends ConsumerWidget {
         Expanded(
           child: products.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => const EmptyState(
+            error: (error, stack) => EmptyState(
               icon: Icons.error_outline,
-              message: 'Could not load products. Try again.',
+              message: l10n.couldNotLoadProducts,
             ),
             data: (list) {
               final filtered = query.isEmpty
@@ -68,9 +70,9 @@ class ProductGrid extends ConsumerWidget {
                           (p.barcode ?? '').toLowerCase().contains(query);
                     }).toList();
               if (filtered.isEmpty) {
-                return const EmptyState(
+                return EmptyState(
                   icon: Icons.search_off,
-                  message: 'No products found — try a different name',
+                  message: context.l10n.noProductsFound,
                 );
               }
               final width = MediaQuery.sizeOf(context).width;

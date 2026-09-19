@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -43,11 +44,12 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final isOwner = ref.watch(sessionProvider).operatorRole == 'owner';
     final deviceId = ref.watch(appIdentityProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('This device'),
+        title: Text(l10n.thisDevice),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -55,9 +57,9 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
           const OfflineBanner(),
           Expanded(
             child: !isOwner
-                ? const EmptyState(
+                ? EmptyState(
                     icon: Icons.lock_outline,
-                    message: 'Only the owner can change device settings.',
+                    message: l10n.deviceSettingsOwnerOnly,
                   )
                 : ListView(
                     padding: const EdgeInsets.all(AppSpacing.md),
@@ -67,7 +69,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
                         builder: (context, snapshot) {
                           final id = snapshot.data ?? '…';
                           return Text(
-                            'Device ID: $id',
+                            l10n.deviceId(id),
                             style: AppTextStyles.caption,
                           );
                         },
@@ -75,32 +77,31 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
                       const SizedBox(height: AppSpacing.lg),
                       TextField(
                         controller: _name,
-                        decoration: const InputDecoration(
-                          labelText: 'Device name *',
+                        decoration: InputDecoration(
+                          labelText: l10n.deviceName,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
                       PrimaryButton(
-                        label: 'Save name',
+                        label: l10n.saveName,
                         busy: _savingName,
                         onPressed: _savingName ? null : _saveName,
                       ),
                       const SizedBox(height: AppSpacing.xl),
-                      const Text(
-                        'Active POS',
+                      Text(
+                        l10n.activePos,
                         style: AppTextStyles.sectionHeader,
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       Text(
-                        'Mark this tablet or phone as the shop’s active POS. '
-                        'Works offline — it syncs when the internet returns.',
+                        l10n.activePosHelp,
                         style: AppTextStyles.body.copyWith(
                           color: AppColors.textSecondary,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
                       PrimaryButton(
-                        label: 'Make this the active POS',
+                        label: l10n.makeActivePos,
                         busy: _activating,
                         onPressed: _activating ? null : _activate,
                       ),
@@ -123,6 +124,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
   }
 
   Future<void> _saveName() async {
+    final l10n = context.l10n;
     setState(() {
       _savingName = true;
       _error = null;
@@ -135,7 +137,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       if (!mounted) return;
       setState(() {
         _savingName = false;
-        _success = 'Device name saved.';
+        _success = l10n.deviceNameSaved;
       });
     } on RepositoryException catch (error) {
       if (!mounted) return;
@@ -154,6 +156,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
   }
 
   Future<void> _activate() async {
+    final l10n = context.l10n;
     setState(() {
       _activating = true;
       _error = null;
@@ -164,8 +167,7 @@ class _DeviceSettingsScreenState extends ConsumerState<DeviceSettingsScreen> {
       if (!mounted) return;
       setState(() {
         _activating = false;
-        _success =
-            'This device will be the active POS after the next successful sync.';
+        _success = l10n.activePosQueued;
       });
     } on RepositoryException catch (error) {
       if (!mounted) return;

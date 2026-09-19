@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/hardware/hardware_provider.dart';
 import '../../../core/hardware/implementations/stub_scanner.dart';
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../providers/barcode_listener_provider.dart';
 
@@ -28,6 +29,7 @@ class _ManualBarcodeFieldState extends ConsumerState<ManualBarcodeField> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final show = ref.watch(showManualBarcodeEntryProvider);
     if (!show) return const SizedBox.shrink();
 
@@ -48,10 +50,10 @@ class _ManualBarcodeFieldState extends ConsumerState<ManualBarcodeField> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z\-]')),
               ],
-              decoration: const InputDecoration(
-                labelText: 'Barcode',
-                prefixIcon: Icon(Icons.keyboard),
-                hintText: 'Type barcode and press Enter',
+              decoration: InputDecoration(
+                labelText: l10n.barcode,
+                prefixIcon: const Icon(Icons.keyboard),
+                hintText: l10n.typeBarcode,
               ),
               onSubmitted: (_) => _submit(),
             ),
@@ -61,7 +63,7 @@ class _ManualBarcodeFieldState extends ConsumerState<ManualBarcodeField> {
             height: AppSpacing.minTapTarget,
             width: AppSpacing.minTapTarget + AppSpacing.md,
             child: IconButton(
-              tooltip: 'Add by barcode',
+              tooltip: l10n.addToCart,
               onPressed: _submit,
               icon: const Icon(Icons.add_shopping_cart),
             ),
@@ -74,7 +76,8 @@ class _ManualBarcodeFieldState extends ConsumerState<ManualBarcodeField> {
   void _submit() {
     final raw = _controller.text.trim();
     if (raw.isEmpty) {
-      ref.read(barcodeLookupErrorProvider.notifier).state = 'Enter a barcode.';
+      ref.read(barcodeLookupErrorProvider.notifier).state =
+          context.l10n.enterBarcode;
       return;
     }
     ref.read(barcodeLookupErrorProvider.notifier).state = null;

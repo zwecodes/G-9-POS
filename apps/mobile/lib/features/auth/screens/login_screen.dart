@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -28,6 +29,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final session = ref.watch(sessionProvider);
     return Scaffold(
       body: SafeArea(
@@ -40,27 +42,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('G9POS', style: AppTextStyles.title),
+                  Text(l10n.appTitle, style: AppTextStyles.title),
                   const SizedBox(height: AppSpacing.xs),
-                  const Text('Sign in to this device', style: AppTextStyles.body),
+                  Text(l10n.signInToDevice, style: AppTextStyles.body),
                   const SizedBox(height: AppSpacing.xl),
                   TextField(
                     controller: _username,
                     autofillHints: const [AutofillHints.username],
-                    decoration: const InputDecoration(labelText: 'Username'),
+                    decoration: InputDecoration(labelText: l10n.username),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: _password,
                     obscureText: true,
                     autofillHints: const [AutofillHints.password],
-                    decoration: const InputDecoration(labelText: 'Password'),
+                    decoration: InputDecoration(labelText: l10n.password),
                     onSubmitted: (_) => _submit(),
                   ),
                   ErrorText(session.error),
                   const SizedBox(height: AppSpacing.lg),
                   PrimaryButton(
-                    label: 'Sign in',
+                    label: l10n.signIn,
                     busy: session.busy,
                     onPressed: _submit,
                   ),
@@ -68,7 +70,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   TextButton(
                     onPressed: () => context.go('/pin'),
                     child: Text(
-                      'Unlock with PIN',
+                      l10n.unlockWithPin,
                       style: AppTextStyles.body.copyWith(color: AppColors.primary),
                     ),
                   ),

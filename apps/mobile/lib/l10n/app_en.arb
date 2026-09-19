@@ -1,0 +1,276 @@
+{
+  "@@locale": "en",
+  "appTitle": "G9POS",
+  "navPos": "POS",
+  "navProducts": "Products",
+  "navReports": "Reports",
+  "navSettings": "Settings",
+  "language": "Language",
+  "languageEnglish": "English",
+  "languageMyanmar": "မြန်မာ",
+  "signIn": "Sign in",
+  "signInToDevice": "Sign in to this device",
+  "username": "Username",
+  "password": "Password",
+  "unlockWithPin": "Unlock with PIN",
+  "unlockThisDevice": "Unlock this device",
+  "whoIsSelling": "Who is selling?",
+  "continueLabel": "Continue",
+  "unlock": "Unlock",
+  "pin": "PIN",
+  "couldNotLoadStaff": "Could not load staff. Try again.",
+  "offlineBanner": "Offline — sales are saving locally",
+  "syncStatus": "Sync status",
+  "syncNow": "Sync now",
+  "pendingItems": "Pending items: {count}",
+  "@pendingItems": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notSyncedYet": "Not synced yet",
+  "lastSynced": "Last synced {when}",
+  "@lastSynced": {
+    "placeholders": {
+      "when": {"type": "String"}
+    }
+  },
+  "notices": "Notices",
+  "noSyncProblems": "No sync problems.",
+  "syncStaleDay": "Sync is more than a day old. Connect to the internet when you can.",
+  "syncStaleHours": "Last sync was about {hours}h ago. Still safe to sell.",
+  "@syncStaleHours": {
+    "placeholders": {
+      "hours": {"type": "int"}
+    }
+  },
+  "syncStaleFewHours": "Sync is a few hours old. Still safe to sell.",
+  "products": "Products",
+  "categories": "Categories",
+  "inventory": "Inventory",
+  "addProduct": "Add product",
+  "noProductsYet": "No products yet — add your first product",
+  "couldNotLoadProducts": "Could not load products. Try again.",
+  "reports": "Reports",
+  "reportsOwnerOnly": "Reports are only available to the owner.",
+  "today": "Today",
+  "thisWeek": "This Week",
+  "custom": "Custom",
+  "revenue": "REVENUE",
+  "profit": "Profit",
+  "incompleteProfit": "Incomplete — add cost prices to see profit",
+  "sales": "Sales",
+  "itemsSold": "Items sold",
+  "topProducts": "Top Products",
+  "noSalesInPeriod": "No sales in this period.",
+  "expenses": "Expenses",
+  "noExpensesInPeriod": "No expenses in this period.",
+  "total": "Total",
+  "couldNotLoadReport": "Could not load the report. Try again.",
+  "settings": "Settings",
+  "salesHistory": "Sales history",
+  "thisDevice": "This device",
+  "deviceSetupChecklist": "Device setup checklist",
+  "hardware": "Hardware",
+  "changePin": "Change PIN",
+  "lockScreen": "Lock screen",
+  "signOut": "Sign out",
+  "signedIn": "Signed in",
+  "signOutConfirmTitle": "Sign out?",
+  "signOutConfirmBody": "You will need the owner password to use this device again.",
+  "stay": "Stay",
+  "cancel": "Cancel",
+  "save": "Save",
+  "delete": "Delete",
+  "keep": "Keep",
+  "done": "Done",
+  "skip": "Skip",
+  "checkout": "Checkout",
+  "saleComplete": "Sale complete",
+  "newSale": "New sale",
+  "cartEmpty": "Scan a product or search above to start a sale",
+  "searchProducts": "Search products",
+  "typeBarcode": "Type barcode",
+  "addToCart": "Add",
+  "payCash": "Take payment",
+  "couldNotCompleteSale": "Could not finish the sale. Try again.",
+  "ownerOnly": "Only the owner can do that.",
+  "inventoryOwnerOnly": "Inventory is only available to the owner.",
+  "couldNotLoadStock": "Could not load stock. Try again.",
+  "allStock": "All Stock ({count})",
+  "@allStock": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "lowStock": "Low Stock ({count})",
+  "@lowStock": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "outOfStock": "Out of Stock ({count})",
+  "@outOfStock": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "noProductsStock": "No products yet.",
+  "noLowStock": "No products are low on stock.",
+  "noOutOfStock": "No products are out of stock.",
+  "adjustStock": "Adjust stock",
+  "stockOwnerOnly": "Only the owner can change stock.",
+  "addStock": "+ Add stock",
+  "removeStock": "- Remove stock",
+  "whyStockChanging": "Why is stock changing?",
+  "saveStockChange": "Save stock change",
+  "currentStock": "Current stock: {stock}",
+  "@currentStock": {
+    "placeholders": {
+      "stock": {"type": "int"}
+    }
+  },
+  "addExpense": "Add expense",
+  "saveExpense": "Save expense",
+  "dateLabel": "Date: {date}",
+  "@dateLabel": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+  "noExpensesYet": "No expenses recorded today",
+  "couldNotLoadExpenses": "Could not load expenses. Try again.",
+  "noSalesToday": "No sales today yet",
+  "couldNotLoadSales": "Could not load sales. Try again.",
+  "cancelled": "CANCELLED",
+  "cancelThisSale": "Cancel This Sale",
+  "cancelSaleTitle": "Cancel this sale?",
+  "cancelSaleBody": "Stock will go back. This only works for sales from today.",
+  "saleUnavailable": "That sale is no longer available.",
+  "reprintReceipt": "Reprint receipt",
+  "categoriesTitle": "Categories",
+  "categoriesOwnerOnly": "Only the owner can manage categories.",
+  "noCategoriesYet": "No categories yet — add the first one",
+  "addCategory": "Add category",
+  "editCategory": "Edit category",
+  "nameRequired": "Name *",
+  "deleteCategoryTitle": "Delete this category?",
+  "deleteCategoryBody": "\"{name}\" will be removed. Products in it must be moved first.",
+  "@deleteCategoryBody": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "couldNotLoadCategories": "Could not load categories. Try again.",
+  "couldNotSaveCategory": "Could not save the category. Try again.",
+  "couldNotDeleteCategory": "Could not delete the category. Try again.",
+  "deviceSettingsOwnerOnly": "Only the owner can change device settings.",
+  "deviceId": "Device ID: {id}",
+  "@deviceId": {
+    "placeholders": {
+      "id": {"type": "String"}
+    }
+  },
+  "deviceName": "Device name *",
+  "saveName": "Save name",
+  "activePos": "Active POS",
+  "activePosHelp": "Mark this tablet or phone as the shop’s active POS. Works offline — it syncs when the internet returns.",
+  "makeActivePos": "Make this the active POS",
+  "deviceNameSaved": "Device name saved.",
+  "activePosQueued": "This device will be the active POS after the next successful sync.",
+  "hardwareTitle": "Hardware",
+  "hardwareHelp": "Scanner and printer are not connected yet. Sales still work — type barcodes manually and reprint receipts from history after you pair hardware.",
+  "barcodeScanner": "Barcode scanner",
+  "receiptPrinter": "Receipt printer",
+  "hardwareTestsLater": "Test buttons will appear here after Bluetooth pairing is added.",
+  "changePinTitle": "Change PIN",
+  "changePinHelp": "Your PIN unlocks this device. It stays on the device and is never sent to the server.",
+  "currentPin": "Current PIN *",
+  "newPin": "New PIN *",
+  "confirmNewPin": "Confirm new PIN *",
+  "pinHint": "4–8 digits",
+  "savePin": "Save PIN",
+  "pinSaved": "PIN saved on this device.",
+  "pinMismatch": "New PIN and confirmation do not match.",
+  "pinInvalid": "New PIN must be 4 to 8 digits.",
+  "pinChangeFailed": "Could not change PIN. Check your current PIN and try again.",
+  "setupTitle": "Set up this device",
+  "setupIntro": "Complete these steps before the shop opens. You can skip optional items, but do not skip them on both devices.",
+  "setupDeviceName": "1. Device name",
+  "setupDeviceNameHint": "Name (e.g. Counter tablet)",
+  "setupHardware": "2. Hardware checklist",
+  "setupScannerTitle": "Barcode scanner paired to this device",
+  "setupScannerSubtitle": "Pair in Android Bluetooth settings, then confirm here.",
+  "setupPrinterTitle": "Receipt printer paired to this device",
+  "setupPrinterSubtitle": "Optional at launch — skip if you have no printer yet.",
+  "setupOtherTitle": "Other device (tablet or phone) also set up",
+  "setupOtherSubtitle": "Both devices must be paired and signed in before opening day.",
+  "openHardwareStatus": "Open hardware status",
+  "setupSync": "3. Sync catalog",
+  "setupSyncEmpty": "No products on this device yet. Sync now after the catalog was imported on the dashboard.",
+  "setupSyncReady": "{count} products ready. Pending sync: {pending}.",
+  "@setupSyncReady": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "pending": {"type": "int"}
+    }
+  },
+  "setupActivePos": "4. Active POS",
+  "setupActivePosHelp": "Mark this device as the shop’s active POS, or skip if this is the standby phone.",
+  "finishSetup": "Finish setup",
+  "finishSetupHint": "Mark or skip every checklist item before finishing.",
+  "needed": "Needed",
+  "skipped": "Skipped",
+  "syncFinished": "Sync finished.",
+  "couldNotSync": "Could not sync. Check the connection and try again — you can still finish setup.",
+  "nameSavedLocal": "Name saved on this device. It will update on the server when online.",
+  "enterDeviceName": "Please enter a device name.",
+  "productForm": "Product",
+  "newProduct": "New product",
+  "editProduct": "Edit product",
+  "priceMmk": "Price (MMK) *",
+  "costPriceMmk": "Cost price (MMK)",
+  "costPriceHint": "Add cost price to see profit in reports",
+  "barcode": "Barcode",
+  "category": "Category",
+  "newCategoryName": "Or type a new category name",
+  "unit": "Unit",
+  "lowStockThreshold": "Low-stock alert at",
+  "saveProduct": "Save product",
+  "activeProduct": "Active (sellable)",
+  "couldNotSaveProduct": "Could not save the product. Try again.",
+  "printerNotConnected": "Printer not connected — sale is saved. Reprint from history later.",
+  "printingReceipt": "Sending to printer…",
+  "ago1d": "1d ago",
+  "agoHours": "{hours}h ago",
+  "@agoHours": {
+    "placeholders": {
+      "hours": {"type": "int"}
+    }
+  },
+  "cart": "Cart",
+  "completeSale": "COMPLETE SALE",
+  "paymentCash": "Payment: CASH",
+  "quantity": "Quantity",
+  "set": "Set",
+  "noProductsFound": "No products found — try a different name",
+  "stockLabel": "Stock {stock}",
+  "@stockLabel": {
+    "placeholders": {
+      "stock": {"type": "int"}
+    }
+  },
+  "none": "None",
+  "deleteProduct": "Delete product",
+  "deleteProductTitle": "Delete this product?",
+  "deleteProductBody": "It will be hidden from selling. Past sales stay in history.",
+  "keepIt": "Keep it",
+  "quantityRequired": "Quantity *",
+  "noteRequired": "Note *",
+  "categoryRequired": "Category *",
+  "amountRequired": "Amount (MMK) *",
+  "noteOptional": "Note (optional)",
+  "reason": "Reason",
+  "enterBarcode": "Enter a barcode.",
+  "noStaffPinsYet": "No staff PINs on this device yet. Sign in online once to download them."
+}

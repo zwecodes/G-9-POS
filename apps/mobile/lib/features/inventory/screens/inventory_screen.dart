@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -16,10 +17,11 @@ class InventoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final isOwner = ref.watch(sessionProvider).operatorRole == 'owner';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inventory'),
+        title: Text(l10n.inventory),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -28,9 +30,9 @@ class InventoryScreen extends ConsumerWidget {
           Expanded(
             child: isOwner
                 ? const _OwnerInventoryBody()
-                : const EmptyState(
+                : EmptyState(
                     icon: Icons.lock_outline,
-                    message: 'Inventory is only available to the owner.',
+                    message: l10n.inventoryOwnerOnly,
                   ),
           ),
         ],
@@ -65,12 +67,13 @@ class _OwnerInventoryBodyState extends ConsumerState<_OwnerInventoryBody>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final levels = ref.watch(stockLevelsProvider);
     return levels.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => const EmptyState(
+      error: (error, stack) => EmptyState(
         icon: Icons.error_outline,
-        message: 'Could not load stock. Try again.',
+        message: l10n.couldNotLoadStock,
       ),
       data: (rows) {
         final low = rows.where((row) => row.isLowStock).toList();
@@ -83,23 +86,23 @@ class _OwnerInventoryBodyState extends ConsumerState<_OwnerInventoryBody>
               unselectedLabelColor: AppColors.textSecondary,
               indicatorColor: AppColors.primary,
               tabs: [
-                Tab(text: 'All Stock (${rows.length})'),
-                Tab(text: 'Low Stock (${low.length})'),
-                Tab(text: 'Out of Stock (${out.length})'),
+                Tab(text: l10n.allStock(rows.length)),
+                Tab(text: l10n.lowStock(low.length)),
+                Tab(text: l10n.outOfStock(out.length)),
               ],
             ),
             Expanded(
               child: TabBarView(
                 controller: _tabs,
                 children: [
-                  _StockList(rows: rows, emptyMessage: 'No products yet.'),
+                  _StockList(rows: rows, emptyMessage: l10n.noProductsStock),
                   _StockList(
                     rows: low,
-                    emptyMessage: 'No products are low on stock.',
+                    emptyMessage: l10n.noLowStock,
                   ),
                   _StockList(
                     rows: out,
-                    emptyMessage: 'No products are out of stock.',
+                    emptyMessage: l10n.noOutOfStock,
                   ),
                 ],
               ),

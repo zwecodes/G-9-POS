@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -16,20 +17,21 @@ class ProductListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final products = ref.watch(productListProvider);
     final isOwner = ref.watch(sessionProvider).operatorRole == 'owner';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Products'),
+        title: Text(l10n.products),
         actions: [
           if (isOwner) ...[
             IconButton(
-              tooltip: 'Categories',
+              tooltip: l10n.categories,
               icon: const Icon(Icons.category_outlined),
               onPressed: () => context.push('/settings/categories'),
             ),
             IconButton(
-              tooltip: 'Inventory',
+              tooltip: l10n.inventory,
               icon: const Icon(Icons.warehouse_outlined),
               onPressed: () => context.push('/products/inventory'),
             ),
@@ -43,19 +45,19 @@ class ProductListScreen extends ConsumerWidget {
           Expanded(
             child: products.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => const EmptyState(
+              error: (error, stack) => EmptyState(
                 icon: Icons.error_outline,
-                message: 'Could not load products. Try again.',
+                message: l10n.couldNotLoadProducts,
               ),
               data: (list) {
                 if (list.isEmpty) {
                   return EmptyState(
                     icon: Icons.inventory_2_outlined,
-                    message: 'No products yet — add your first product',
+                    message: l10n.noProductsYet,
                     action: isOwner
                         ? TextButton(
                             onPressed: () => context.push('/products/new'),
-                            child: const Text('Add product'),
+                            child: Text(l10n.addProduct),
                           )
                         : null,
                   );

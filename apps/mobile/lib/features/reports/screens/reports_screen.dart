@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -16,10 +17,11 @@ class ReportsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final isOwner = ref.watch(sessionProvider).operatorRole == 'owner';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reports'),
+        title: Text(l10n.reports),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -28,9 +30,9 @@ class ReportsScreen extends ConsumerWidget {
           Expanded(
             child: isOwner
                 ? const _OwnerReportsBody()
-                : const EmptyState(
+                : EmptyState(
                     icon: Icons.lock_outline,
-                    message: 'Reports are only available to the owner.',
+                    message: l10n.reportsOwnerOnly,
                   ),
           ),
         ],
@@ -44,6 +46,7 @@ class _OwnerReportsBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final range = ref.watch(reportRangeProvider);
     final summary = ref.watch(reportSummaryProvider);
     return Column(
@@ -56,18 +59,18 @@ class _OwnerReportsBody extends ConsumerWidget {
             0,
           ),
           child: SegmentedButton<ReportPeriod>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: ReportPeriod.today,
-                label: Text('Today'),
+                label: Text(l10n.today),
               ),
               ButtonSegment(
                 value: ReportPeriod.thisWeek,
-                label: Text('This Week'),
+                label: Text(l10n.thisWeek),
               ),
               ButtonSegment(
                 value: ReportPeriod.custom,
-                label: Text('Custom'),
+                label: Text(l10n.custom),
               ),
             ],
             selected: {range.period},
@@ -101,25 +104,25 @@ class _OwnerReportsBody extends ConsumerWidget {
         Expanded(
           child: summary.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => const EmptyState(
+            error: (error, stack) => EmptyState(
               icon: Icons.error_outline,
-              message: 'Could not load the report. Try again.',
+              message: l10n.couldNotLoadReport,
             ),
             data: (data) => ListView(
               padding: const EdgeInsets.all(AppSpacing.md),
               children: [
-                Text('REVENUE', style: AppTextStyles.sectionHeader),
+                Text(l10n.revenue, style: AppTextStyles.sectionHeader),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   CurrencyFormatter.format(data.revenueMmk),
                   style: AppTextStyles.saleTotal,
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text('Profit', style: AppTextStyles.sectionHeader),
+                Text(l10n.profit, style: AppTextStyles.sectionHeader),
                 const SizedBox(height: AppSpacing.xs),
                 if (data.incompleteProfit || data.profitMmk == null)
                   Text(
-                    'Incomplete — add cost prices to see profit',
+                    l10n.incompleteProfit,
                     style: AppTextStyles.body.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -130,14 +133,14 @@ class _OwnerReportsBody extends ConsumerWidget {
                     style: AppTextStyles.saleTotal,
                   ),
                 const SizedBox(height: AppSpacing.lg),
-                _MetricRow(label: 'Sales', value: '${data.saleCount}'),
-                _MetricRow(label: 'Items sold', value: '${data.itemsSold}'),
+                _MetricRow(label: l10n.sales, value: '${data.saleCount}'),
+                _MetricRow(label: l10n.itemsSold, value: '${data.itemsSold}'),
                 const SizedBox(height: AppSpacing.xl),
-                const Text('Top Products', style: AppTextStyles.sectionHeader),
+                Text(l10n.topProducts, style: AppTextStyles.sectionHeader),
                 const SizedBox(height: AppSpacing.sm),
                 if (data.topProducts.isEmpty)
                   Text(
-                    'No sales in this period.',
+                    l10n.noSalesInPeriod,
                     style: AppTextStyles.caption,
                   )
                 else
@@ -150,11 +153,11 @@ class _OwnerReportsBody extends ConsumerWidget {
                       ),
                     ),
                 const SizedBox(height: AppSpacing.xl),
-                const Text('Expenses', style: AppTextStyles.sectionHeader),
+                Text(l10n.expenses, style: AppTextStyles.sectionHeader),
                 const SizedBox(height: AppSpacing.sm),
                 if (data.expenses.isEmpty)
                   Text(
-                    'No expenses in this period.',
+                    l10n.noExpensesInPeriod,
                     style: AppTextStyles.caption,
                   )
                 else ...[
@@ -176,8 +179,8 @@ class _OwnerReportsBody extends ConsumerWidget {
                   const Divider(height: AppSpacing.lg),
                   Row(
                     children: [
-                      const Expanded(
-                        child: Text('Total', style: AppTextStyles.cartItemName),
+                      Expanded(
+                        child: Text(l10n.total, style: AppTextStyles.cartItemName),
                       ),
                       Text(
                         CurrencyFormatter.format(data.expenseTotalMmk),

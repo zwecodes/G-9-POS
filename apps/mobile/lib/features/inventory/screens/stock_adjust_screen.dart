@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -39,13 +40,14 @@ class _StockAdjustScreenState extends ConsumerState<StockAdjustScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final isOwner = ref.watch(sessionProvider).operatorRole == 'owner';
     if (!isOwner) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Adjust stock')),
-        body: const EmptyState(
+        appBar: AppBar(title: Text(l10n.adjustStock)),
+        body: EmptyState(
           icon: Icons.lock_outline,
-          message: 'Only the owner can change stock.',
+          message: l10n.stockOwnerOnly,
         ),
       );
     }
@@ -53,7 +55,7 @@ class _StockAdjustScreenState extends ConsumerState<StockAdjustScreen> {
     final level = ref.watch(productStockLevelProvider(widget.productId));
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Adjust stock'),
+        title: Text(l10n.adjustStock),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -84,11 +86,7 @@ class _StockAdjustScreenState extends ConsumerState<StockAdjustScreen> {
                     Text(row.product.name, style: AppTextStyles.title),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Current stock',
-                      style: AppTextStyles.caption,
-                    ),
-                    Text(
-                      '${row.currentStock}',
+                      l10n.currentStock(row.currentStock),
                       style: AppTextStyles.saleTotal.copyWith(color: stockColor),
                     ),
                     const SizedBox(height: AppSpacing.lg),
@@ -115,7 +113,7 @@ class _StockAdjustScreenState extends ConsumerState<StockAdjustScreen> {
                                       : 1,
                                 ),
                               ),
-                              child: const Text('+ Add stock'),
+                              child: Text(l10n.addStock),
                             ),
                           ),
                         ),
@@ -141,7 +139,7 @@ class _StockAdjustScreenState extends ConsumerState<StockAdjustScreen> {
                                       : 1,
                                 ),
                               ),
-                              child: const Text('- Remove stock'),
+                              child: Text(l10n.removeStock),
                             ),
                           ),
                         ),
@@ -154,23 +152,23 @@ class _StockAdjustScreenState extends ConsumerState<StockAdjustScreen> {
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                       ],
-                      decoration: const InputDecoration(
-                        labelText: 'Quantity *',
+                      decoration: InputDecoration(
+                        labelText: context.l10n.quantityRequired,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     TextField(
                       controller: _note,
                       maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Note *',
-                        hintText: 'Why is stock changing?',
+                      decoration: InputDecoration(
+                        labelText: context.l10n.noteRequired,
+                        hintText: l10n.whyStockChanging,
                       ),
                     ),
                     ErrorText(_error),
                     const SizedBox(height: AppSpacing.xl),
                     PrimaryButton(
-                      label: 'Save stock change',
+                      label: l10n.saveStockChange,
                       busy: _saving,
                       onPressed: _saving ? null : _save,
                     ),

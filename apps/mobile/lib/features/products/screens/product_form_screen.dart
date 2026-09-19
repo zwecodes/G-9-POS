@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -74,9 +75,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final categories = ref.watch(categoryListProvider).valueOrNull ?? [];
     return Scaffold(
-      appBar: AppBar(title: Text(_isEdit ? 'Edit product' : 'Add product')),
+      appBar: AppBar(title: Text(_isEdit ? l10n.editProduct : l10n.addProduct)),
       body: Column(
         children: [
           Expanded(
@@ -85,11 +87,11 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
               children: [
                 TextField(
                   controller: _name,
-                  decoration: const InputDecoration(labelText: 'Name *'),
+                  decoration: InputDecoration(labelText: l10n.nameRequired),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Category'),
+                  decoration: InputDecoration(labelText: l10n.category),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String?>(
                       isExpanded: true,
@@ -106,43 +108,43 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: _newCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Or type a new category name',
+                  decoration: InputDecoration(
+                    labelText: l10n.newCategoryName,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _barcode,
-                  decoration: const InputDecoration(labelText: 'Barcode'),
+                  decoration: InputDecoration(labelText: l10n.barcode),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _price,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(labelText: 'Price *'),
+                  decoration: InputDecoration(labelText: l10n.priceMmk),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _cost,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Cost price',
-                    hintText: 'Add cost price to see profit in reports',
+                  decoration: InputDecoration(
+                    labelText: l10n.costPriceMmk,
+                    hintText: l10n.costPriceHint,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _unit,
-                  decoration: const InputDecoration(labelText: 'Unit'),
+                  decoration: InputDecoration(labelText: l10n.unit),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextField(
                   controller: _threshold,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(labelText: 'Low stock threshold'),
+                  decoration: InputDecoration(labelText: l10n.lowStockThreshold),
                 ),
                 ErrorText(_error),
                 if (_isEdit) ...[
@@ -162,7 +164,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: PrimaryButton(
-                label: 'Save',
+                label: l10n.save,
                 busy: _saving,
                 onPressed: _save,
               ),
@@ -211,17 +213,18 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Could not save the product. Try again.';
+        _error = context.l10n.couldNotSaveProduct;
       });
     }
   }
 
   Future<void> _confirmDelete() async {
+    final l10n = context.l10n;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Delete this product?', style: AppTextStyles.title),
+          title: Text(context.l10n.deleteProductTitle, style: AppTextStyles.title),
           content: const Text(
             'It will be hidden from selling. Past sales stay as they are.',
             style: AppTextStyles.body,
@@ -233,7 +236,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: Text('Delete', style: AppTextStyles.body.copyWith(color: AppColors.error)),
+              child: Text(l10n.delete, style: AppTextStyles.body.copyWith(color: AppColors.error)),
             ),
           ],
         );

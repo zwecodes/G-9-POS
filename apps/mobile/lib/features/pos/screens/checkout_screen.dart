@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -24,25 +25,26 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final cart = ref.watch(cartProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkout')),
+      appBar: AppBar(title: Text(l10n.checkout)),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('TOTAL', style: AppTextStyles.sectionHeader),
+            Text(l10n.total.toUpperCase(), style: AppTextStyles.sectionHeader),
             Text(
               CurrencyFormatter.format(cart.totalAmountMmk),
               style: AppTextStyles.saleTotal,
             ),
             const SizedBox(height: AppSpacing.lg),
-            Text('Payment: CASH', style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+            Text(context.l10n.paymentCash, style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
             ErrorText(_error),
             const Spacer(),
             PrimaryButton(
-              label: 'COMPLETE SALE',
+              label: context.l10n.completeSale,
               height: AppSpacing.completeSaleButton,
               busy: _busy,
               onPressed: cart.isEmpty ? null : _complete,
@@ -78,7 +80,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = 'Could not complete the sale. Try again.';
+        _error = context.l10n.couldNotCompleteSale;
       });
     }
   }

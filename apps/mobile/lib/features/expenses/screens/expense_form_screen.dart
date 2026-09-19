@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/date_utils.dart';
@@ -35,10 +36,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final today = ShopDateUtils.todayShopDateString();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add expense'),
+        title: Text(l10n.addExpense),
         actions: const [SyncStatusButton()],
       ),
       body: Column(
@@ -48,7 +50,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             child: ListView(
               padding: const EdgeInsets.all(AppSpacing.md),
               children: [
-                Text('Date: $today', style: AppTextStyles.caption),
+                Text(l10n.dateLabel(today), style: AppTextStyles.caption),
                 const SizedBox(height: AppSpacing.md),
                 InputDecorator(
                   decoration: const InputDecoration(labelText: 'Category *'),
@@ -92,7 +94,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                 ErrorText(_error),
                 const SizedBox(height: AppSpacing.xl),
                 PrimaryButton(
-                  label: 'Save expense',
+                  label: l10n.saveExpense,
                   busy: _saving,
                   onPressed: _saving ? null : _save,
                 ),
